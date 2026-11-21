@@ -492,3 +492,219 @@ def test_v170_sec2_direct_revalidation_and_barrier_detect_notes_mutation_on_equi
     assert barrier_reason == "target_edited_during_execution"
     assert not any(w[0] == "close_issue" for w in api.writes)
 
+
+# ---------------------------------------------------------------------------
+# v1.7.1 Mandatory Adversarial Polarity / Negation / Modality Suite (10 tests)
+# ---------------------------------------------------------------------------
+
+def test_v171_adv_01_com_filtro_vs_sem_filtro_por_autor_preserved_open():
+    i1 = _ne(7201, "Sushi Manga", "https://sushimanga.com", notes="Quero a extensão com filtro por autor.")
+    i2 = _ne(
+        7202,
+        "Sushi Manga",
+        "https://sushimanga.com",
+        notes="Quero a extensão sem filtro por autor.",
+        created_at="2026-11-02T10:00:00Z",
+    )
+    dec, _, _ = _eval([i1, i2], 7202)
+    assert dec.classification == "possible_duplicate"
+    assert dec.should_auto_close is False
+    assert "scope_or_observation_divergence" in dec.candidates[0].contradictions
+
+
+def test_v171_adv_02_permitir_login_vs_bloquear_login_preserved_open():
+    i1 = _ne(7203, "Sushi Manga", "https://sushimanga.com", notes="Preciso permitir login na extensão.")
+    i2 = _ne(
+        7204,
+        "Sushi Manga",
+        "https://sushimanga.com",
+        notes="Preciso bloquear login na extensão.",
+        created_at="2026-11-02T10:00:00Z",
+    )
+    dec, _, _ = _eval([i1, i2], 7204)
+    assert dec.classification == "possible_duplicate"
+    assert dec.should_auto_close is False
+
+
+def test_v171_adv_03_exibir_conteudo_adulto_vs_ocultar_conteudo_adulto_preserved_open():
+    i1 = _ne(7205, "Sushi Manga", "https://sushimanga.com", notes="Preciso exibir conteúdo adulto na listagem.")
+    i2 = _ne(
+        7206,
+        "Sushi Manga",
+        "https://sushimanga.com",
+        notes="Preciso ocultar conteúdo adulto na listagem.",
+        created_at="2026-11-02T10:00:00Z",
+    )
+    dec, _, _ = _eval([i1, i2], 7206)
+    assert dec.classification == "possible_duplicate"
+    assert dec.should_auto_close is False
+
+
+def test_v171_adv_04_apenas_portugues_vs_portugues_e_ingles_preserved_open():
+    i1 = _ne(7207, "Sushi Manga", "https://sushimanga.com", notes="Preciso que mostre apenas português.")
+    i2 = _ne(
+        7208,
+        "Sushi Manga",
+        "https://sushimanga.com",
+        notes="Preciso que mostre português e inglês.",
+        created_at="2026-11-02T10:00:00Z",
+    )
+    dec, _, _ = _eval([i1, i2], 7208)
+    assert dec.classification == "possible_duplicate"
+    assert dec.should_auto_close is False
+
+
+def test_v171_adv_05_ordenacao_crescente_vs_decrescente_preserved_open():
+    i1 = _ne(
+        7209,
+        "Sushi Manga",
+        "https://sushimanga.com",
+        notes="Preciso que os capítulos sejam ordenados em ordem crescente.",
+    )
+    i2 = _ne(
+        7210,
+        "Sushi Manga",
+        "https://sushimanga.com",
+        notes="Preciso que os capítulos sejam ordenados em ordem decrescente.",
+        created_at="2026-11-02T10:00:00Z",
+    )
+    dec, _, _ = _eval([i1, i2], 7210)
+    assert dec.classification == "possible_duplicate"
+    assert dec.should_auto_close is False
+
+
+def test_v171_adv_06_exigir_autenticacao_vs_dispensar_autenticacao_preserved_open():
+    i1 = _ne(
+        7211,
+        "Sushi Manga",
+        "https://sushimanga.com",
+        notes="Preciso exigir autenticação para acessar o catálogo.",
+    )
+    i2 = _ne(
+        7212,
+        "Sushi Manga",
+        "https://sushimanga.com",
+        notes="Preciso dispensar autenticação para acessar o catálogo.",
+        created_at="2026-11-02T10:00:00Z",
+    )
+    dec, _, _ = _eval([i1, i2], 7212)
+    assert dec.classification == "possible_duplicate"
+    assert dec.should_auto_close is False
+
+
+def test_v171_adv_07_recurso_obrigatorio_vs_recurso_opcional_preserved_open():
+    i1 = _ne(7213, "Sushi Manga", "https://sushimanga.com", notes="O login na extensão deve ser obrigatório.")
+    i2 = _ne(
+        7214,
+        "Sushi Manga",
+        "https://sushimanga.com",
+        notes="O login na extensão deve ser opcional.",
+        created_at="2026-11-02T10:00:00Z",
+    )
+    dec, _, _ = _eval([i1, i2], 7214)
+    assert dec.classification == "possible_duplicate"
+    assert dec.should_auto_close is False
+
+
+def test_v171_adv_08_equivalent_phrases_positive_and_negative_auto_close():
+    # Equivalent affirmative phrasings ("com filtro por autor" vs "tenha filtro pelo nome do autor")
+    p1 = _ne(7215, "Sushi Manga", "https://sushimanga.com", notes="Quero a extensão com filtro por autor.")
+    p2 = _ne(
+        7216,
+        "Sushi Manga",
+        "https://sushimanga.com",
+        notes="Preciso que a extensão tenha filtro pelo nome do autor.",
+        created_at="2026-11-02T10:00:00Z",
+    )
+    dec_pos, _, _ = _eval([p1, p2], 7216)
+    assert dec_pos.classification == "confirmed_duplicate"
+    assert dec_pos.should_auto_close is True
+
+    # Equivalent negative phrasings ("sem filtro por autor" vs "sem filtrar pelo nome do autor")
+    n1 = _ne(7217, "Nori Manga", "https://norimanga.com", notes="Quero a extensão sem filtro por autor.")
+    n2 = _ne(
+        7218,
+        "Nori Manga",
+        "https://norimanga.com",
+        notes="Preciso da extensão sem filtrar pelo nome do autor.",
+        created_at="2026-11-02T10:00:00Z",
+    )
+    dec_neg, _, _ = _eval([n1, n2], 7218)
+    assert dec_neg.classification == "confirmed_duplicate"
+    assert dec_neg.should_auto_close is True
+
+
+def test_v171_adv_09_true_duplicates_without_additional_observations_auto_close():
+    i1 = _ne(7219, "Nori Manga", "https://norimanga.com", notes="_No response_")
+    i2 = _ne(
+        7220,
+        "NoriManga",
+        "https://www.norimanga.com/home",
+        notes="_No response_",
+        created_at="2026-11-02T10:00:00Z",
+    )
+    dec, _, _ = _eval([i1, i2], 7220)
+    assert dec.classification == "confirmed_duplicate"
+    assert dec.should_auto_close is True
+
+
+def test_v171_adv_10_contradictory_observation_edited_during_closing_rolls_back_and_aborts():
+    obs_pos = "Quero a extensão com filtro por autor."
+    obs_neg = "Quero a extensão sem filtro por autor."
+    i1 = _ne(7221, "Sushi Manga", "https://sushimanga.com", notes=obs_pos)
+    i2 = _ne(
+        7222,
+        "Sushi Manga",
+        "https://sushimanga.com",
+        notes=obs_pos,
+        created_at="2026-11-02T10:00:00Z",
+    )
+    parsed = parse_corpus([i1, i2])
+    matcher = DuplicateMatcher(parsed, _cfg())
+    dec = matcher.evaluate(parsed[1])
+    assert dec.classification == "confirmed_duplicate"
+    assert dec.should_auto_close is True
+
+    # 1. Edit between evaluation and comment (pre-comment live revalidation)
+    api_pre = InMemoryGitHubApi([i1, _ne(7222, "Sushi Manga", "https://sushimanga.com", notes=obs_neg, created_at="2026-11-02T10:00:00Z")])
+    res_pre = GuardActionExecutor(api_pre, _cfg(), {7221: i1, 7222: i2}, matcher=matcher).apply(dec)
+    assert res_pre.closed is False
+    assert api_pre.issues[7222]["state"] == "open"
+    assert LABEL_DUPLICATE not in {l["name"] for l in api_pre.issues[7222]["labels"]}
+    assert not any(w[0] == "close_issue" for w in api_pre.writes)
+
+    # 2. Edit between comment and label
+    class MutateBeforeLabelApi(InMemoryGitHubApi):
+        def create_comment(self, issue_number: int, body: str) -> dict:
+            r = super().create_comment(issue_number, body)
+            if issue_number == 7222:
+                self.issues[7222]["body"] = _ne(
+                    7222, "Sushi Manga", "https://sushimanga.com", notes=obs_neg, created_at="2026-11-02T10:00:00Z"
+                ).body
+            return r
+
+    api_mid = MutateBeforeLabelApi([i1, i2])
+    res_mid = GuardActionExecutor(api_mid, _cfg(), {7221: i1, 7222: i2}, matcher=matcher).apply(dec)
+    assert res_mid.closed is False
+    assert res_mid.action_taken == "aborted_concurrent_edit_before_label"
+    assert LABEL_DUPLICATE not in {l["name"] for l in api_mid.issues[7222]["labels"]}
+    assert not any(w[0] == "close_issue" for w in api_mid.writes)
+
+    # 3. Edit right after Duplicado label and immediately before close_issue() -> rolls back Duplicado label
+    class MutateBeforeCloseApi(InMemoryGitHubApi):
+        def add_labels(self, issue_number: int, labels: list[str]) -> None:
+            super().add_labels(issue_number, labels)
+            if issue_number == 7222 and LABEL_DUPLICATE in labels:
+                self.issues[7222]["body"] = _ne(
+                    7222, "Sushi Manga", "https://sushimanga.com", notes=obs_neg, created_at="2026-11-02T10:00:00Z"
+                ).body
+
+    api_close = MutateBeforeCloseApi([i1, i2])
+    res_close = GuardActionExecutor(api_close, _cfg(), {7221: i1, 7222: i2}, matcher=matcher).apply(dec)
+    assert res_close.closed is False
+    assert res_close.action_taken == "aborted_concurrent_edit_before_close"
+    assert api_close.issues[7222]["state"] == "open"
+    assert LABEL_DUPLICATE not in {l["name"] for l in api_close.issues[7222]["labels"]}
+    assert ("remove_label", 7222, LABEL_DUPLICATE) in api_close.writes
+    assert not any(w[0] == "close_issue" for w in api_close.writes)
+

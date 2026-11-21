@@ -851,15 +851,23 @@ def extract_language_context(
         if pat.search(norm_text):
             mentioned.add(code)
 
-    existing_only: set[str] = set()
+    raw_existing_only: set[str] = set()
     for pat in _EXISTING_ONLY_LANG_PATTERNS:
         for m in pat.finditer(norm_text):
-            existing_only.update(normalize_language_code(m.group(1)))
+            raw_existing_only.update(normalize_language_code(m.group(1)))
 
-    desired: set[str] = set()
+    raw_desired: set[str] = set()
     for pat in _DESIRED_LANG_PATTERNS:
         for m in pat.finditer(norm_text):
-            desired.update(normalize_language_code(m.group(1)))
+            raw_desired.update(normalize_language_code(m.group(1)))
+
+    has_existing_ext_context = bool(
+        detect_extension_already_exists(norm_text)
+        or re.search(r"\b(?:focad[ao]s?|extens(?:ao|oes)|repositorio|no\s+catalogo)\b", norm_text)
+        or (raw_desired - raw_existing_only)
+    )
+    existing_only: set[str] = set(raw_existing_only) if has_existing_ext_context else set()
+    desired: set[str] = set(raw_desired) if has_existing_ext_context else (raw_desired | raw_existing_only)
     desired -= existing_only
 
     url_loc = extract_url_locale(url)
@@ -1356,14 +1364,21 @@ def has_substantive_observations_text(
     norm = normalize_text(text, preserve_urls=False)
     if not norm or len(norm) < 12:
         return False
-    # Check for functional requirements/constraints (imperative verbs, ordering/grouping criteria, explicit filter/option requests)
+    if _NON_SUBSTANTIVE_NOTE_RE.match(norm) and len(norm) < 60:
+        if not re.search(r"\b(?:sem|nao|apenas|somente|bloquear|ocultar|exigir|dispensar|obrigatori\w+|opcional)\b", norm):
+            return False
+    # Ignore pure praise/thank-you notes without functional constraints
+    if re.match(r"^(?:quero\s+agradecer|gostaria\s+de\s+agradecer|muito\s+obrigad[oa]|parabens)\b", norm) and not re.search(
+        r"\b(?:filtro[s]?|login|autenticacao|adulto|nsfw|crescente|decrescente|ordenar|agrupar|sem\s+\w+|bloquear|ocultar|obrigatori\w+|opcional)\b",
+        norm,
+    ):
+        return False
+    # Check for functional requirements/constraints (imperative verbs, ordering/grouping criteria, polarity/modality/visibility/restriction)
     if re.search(
-        r"\b(?:adicionar\s+suporte|precis\w+|gostaria|suporte\s+(?:a|ao|para)|apenas\s+em|somente\s+em|corrigir|consertar|arrumar|resolver|incluir|implementar|faltando|separar|separad[oa]s?|dividir|unificar|filtrar\s+por|filtro\s+(?:de|por)|ordenar|ordenad[oa]s?|ordena[cç][aã]o|ordem\s+(?:de|por|crescente|decrescente|cronologica)|agrupar|agrupad[oa]s?|agrupamento|listad[oa]s?\s+por|exibir\s+apenas|mostrar\s+apenas|permitir|op[cç][aã]o\s+(?:de|para)|configura[cç][aã]o|deve(?:m|ra|ria)?\s+(?:ter|ser|exibir|mostrar|ordenar|agrupar|filtrar)|necessari[oa]\s+que|requisito[s]?|obrigatori\w+|nao\s+(?:exibe|mostra|tem|funciona|carrega|reproduz))\b",
+        r"\b(?:adicionar\s+suporte|precis\w+|gostaria|quero|queria|suporte\s+(?:a|ao|para)|apenas\s+(?:em|por|com|sem|para|no|na|portugues|ingles|espanhol|manga[s]?|anime[s]?|novel[s]?)|somente\s+(?:em|por|com|sem|para|no|na|portugues|ingles|espanhol|manga[s]?|anime[s]?|novel[s]?)|exclusivamente|unicamente|corrigir|consertar|arrumar|resolver|incluir|implementar|faltando|separar|separad[oa]s?|dividir|unificar|filtrar\s+por|filtro\s+(?:de|por)|ordenar|ordenad[oa]s?|ordena[cç][aã]o|ordem\s+(?:de|por|crescente|decrescente|cronologica)|crescente|decrescente|ascendente|descendente|agrupar|agrupad[oa]s?|agrupamento|listad[oa]s?\s+por|exibir|mostrar|ocultar|esconder|permitir|bloquear|proibir|desativar|desabilitar|dispensar|exigir|op[cç][aã]o\s+(?:de|para)|configura[cç][aã]o|deve(?:m|ra|ria)?\s+(?:ter|ser|exibir|mostrar|ocultar|permitir|bloquear|ordenar|agrupar|filtrar)|necessari[oa]\s+que|requisito[s]?|obrigatori\w+|opcional|opcionalmente|facultativ\w+|sem\s+(?:filtro[s]?|login|autenticacao|cadastro|anuncio[s]?|propaganda[s]?|nsfw|conteudo|adulto|paywall|vip)|com\s+(?:filtro[s]?|login|autenticacao|cadastro|legenda[s]?|dublagem|hd|4k)|nao\s+(?:exibe|mostra|tem|funciona|carrega|reproduz|permitir|incluir|exigir))\b",
         norm,
     ):
         return True
-    if _NON_SUBSTANTIVE_NOTE_RE.match(norm) and len(norm) < 60:
-        return False
     return False
 
 
