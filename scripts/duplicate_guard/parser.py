@@ -258,6 +258,15 @@ def _infer_parts_from_free_text(free_text: str) -> set[str]:
     return {part for part, pat in _FREE_TEXT_PART_PATTERNS if pat.search(norm)}
 
 
+_PARSER_INCOMPATIBLE_PARTS = (
+    (frozenset({"login"}), frozenset({"reader", "video", "search", "catalog", "chapters", "metadata", "install"})),
+    (frozenset({"search"}), frozenset({"reader", "video", "login", "install"})),
+    (frozenset({"install"}), frozenset({"reader", "video", "search", "chapters", "metadata", "login"})),
+    (frozenset({"reader"}), frozenset({"search", "login", "install"})),
+    (frozenset({"video"}), frozenset({"search", "login", "install"})),
+)
+
+
 def _parse_affected_parts(sections: dict[str, str], ext_type: str | None, *, free_text: str = "") -> frozenset[str]:
     parts: set[str] = set()
     raw_part = strip_accents(sections.get("affected_part", "")).lower().strip()
@@ -278,12 +287,19 @@ def _parse_affected_parts(sections: dict[str, str], ext_type: str | None, *, fre
                 elif mapped:
                     parts.add(mapped)
 
-    # When explicit field was omitted or marked 'Outro', infer concrete part mentions from free text
-    if not (parts - {"other"}) and free_text:
+    if free_text:
         inferred = _infer_parts_from_free_text(free_text)
-        if inferred:
+        concrete = parts - {"other"}
+        if not concrete and inferred:
             parts.discard("other")
             parts.update(inferred)
+        elif concrete and inferred and not (concrete & inferred):
+            contradicts = any(
+                (concrete <= g1 and inferred <= g2) or (concrete <= g2 and inferred <= g1)
+                for g1, g2 in _PARSER_INCOMPATIBLE_PARTS
+            )
+            if contradicts:
+                parts = set(inferred)
     return frozenset(parts)
 
 
@@ -458,7 +474,11 @@ def parse_issue(raw: RawIssue, known_extensions: frozenset[str] = frozenset()) -
     ext_already_exists = detect_extension_already_exists(free_intent_text)
     feature_topics, symptom_topics = extract_feature_and_symptom_topics(free_intent_text)
     has_reg_signal = detect_regression_signal(free_intent_text)
-    specific_work_hint = extract_specific_work_hint(title_symptom, description, extension_name=name)
+    specific_work_hint = extract_specific_work_hint(
+        title_symptom,
+        f"{description}\n{reproduction}\n{additional_info}",
+        extension_name=name,
+    )
     mentioned_chapters = extract_chapter_numbers(combined_symptom_text)
     mentioned_episodes = extract_episode_numbers(combined_symptom_text)
     api_endpoints = extract_api_endpoints(combined_symptom_text)
@@ -507,9 +527,10 @@ def parse_issue(raw: RawIssue, known_extensions: frozenset[str] = frozenset()) -
         semantic_intent,
         ext_type or "",
         compact,
-        url_obj.identity_key if url_obj else "",
-        old_url_obj.identity_key if old_url_obj else "",
-        new_url_obj.identity_key if new_url_obj else "",
+        url_obj.destination_key or url_obj.identity_key if url_obj else "",
+        old_url_obj.destination_key or old_url_obj.identity_key if old_url_obj else "",
+        new_url_obj.destination_key or new_url_obj.identity_key if new_url_obj else "",
+        version_raw,
         declared_code,
         ",".join(sorted(target_langs)),
         ",".join(sorted(existing_only_langs)),
@@ -518,7 +539,7 @@ def parse_issue(raw: RawIssue, known_extensions: frozenset[str] = frozenset()) -
         ",".join(sorted(mentioned_chapters)),
         ",".join(sorted(mentioned_episodes)),
         ",".join(sorted(api_endpoints)),
-        normalize_text(f"{title_symptom} {description} {additional_info}", preserve_urls=True),
+        normalize_text(f"{title_symptom} {description} {reproduction} {additional_info}", preserve_urls=True),
         related_ext_compact,
     ]
     fp_hash = hashlib.sha256("|".join(fp_parts).encode("utf-8")).hexdigest()[:16]
@@ -571,6 +592,7 @@ def parse_issue(raw: RawIssue, known_extensions: frozenset[str] = frozenset()) -
         mentioned_chapters=mentioned_chapters,
         mentioned_episodes=mentioned_episodes,
         api_endpoints=api_endpoints,
+        title_symptom=title_symptom,
     )
 
 
