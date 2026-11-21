@@ -1610,3 +1610,13 @@ def test_37_duplicate_labels_lifecycle_and_workflow_conflict_protection(tmp_path
     # Closed non-duplicate workflows remain valid YAML
     closed_guard = yaml.safe_load((REPO_ROOT / ".github" / "workflows" / "issue-closed-guard.yml").read_text(encoding="utf-8"))
     assert closed_guard["permissions"] == {"issues": "write"}
+
+    # CLI without client_override (real GitHubClient path) must persist incremental cache on non-dry-run
+    prod_api = InMemoryGitHubApi([orig])
+    prod_cache = tmp_path / "prod_cli_cache.json"
+    with patch("scripts.duplicate_guard.cli.GitHubClient", return_value=prod_api):
+        rc_prod = run_cli(["--mode", "backfill", "--no-dry-run", "--cache-file", str(prod_cache)])
+    assert rc_prod == 0
+    _ = capsys.readouterr()
+    assert prod_cache.exists()
+    assert "940" in json.loads(prod_cache.read_text(encoding="utf-8"))["evaluated"]
