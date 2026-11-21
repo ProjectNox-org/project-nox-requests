@@ -11,7 +11,7 @@ from typing import Literal
 
 Classification = Literal["no_match", "possible_duplicate", "confirmed_duplicate"]
 
-RULE_ENGINE_VERSION = "1.5.0"
+RULE_ENGINE_VERSION = "1.6.0"
 
 INTENT_CREATE_EXTENSION = "create_extension"
 INTENT_BUG_FIX = "bug_fix"
@@ -120,6 +120,9 @@ class NormalizedUrl:
     exact_host: str = ""
     subdomain: str = ""
     port: int | None = None
+    scope_path: str = "/"
+    functional_query: str = ""
+    source_identity_key: str = ""
 
 
 @dataclass(frozen=True)
@@ -218,6 +221,65 @@ class ParsedIssue:
     mentioned_episodes: frozenset[str] = frozenset()
     api_endpoints: frozenset[str] = frozenset()
     title_symptom: str = ""
+    has_global_work_scope: bool = False
+    has_unnamed_specific_work_scope: bool = False
+
+
+def _languages_cover_request(catalog_langs: frozenset[str], requested: frozenset[str]) -> bool:
+    """Return True only when catalog_langs unambiguously covers every requested language."""
+    valid_catalog_langs = {lang for lang in catalog_langs if not lang.startswith("unknown:")}
+    if not valid_catalog_langs or not requested:
+        return False
+    if any(lang.startswith("unknown:") for lang in requested):
+        return False
+    if "all" in requested:
+        return "all" in valid_catalog_langs
+    if "all" in valid_catalog_langs:
+        return True
+    return requested <= valid_catalog_langs
+
+
+@dataclass(frozen=True)
+class CatalogSource:
+    """Per-source entry published inside an extension package in index.min.json."""
+
+    name: str
+    compact_name: str
+    source_id: str
+    base_url: str
+    url: NormalizedUrl
+    languages: frozenset[str]
+    has_contradictory_metadata: bool = False
+
+    def supports_languages(self, requested: frozenset[str]) -> bool:
+        """Return True only when this specific source unambiguously covers every requested language."""
+        if self.has_contradictory_metadata:
+            return False
+        return _languages_cover_request(self.languages, requested)
+
+    def matches_url(self, target_url: NormalizedUrl | None) -> bool:
+        """Return True when this source matches the requested source URL identity (host, port, scope path, query)."""
+        if not target_url or not target_url.is_valid_domain or not self.url.is_valid_domain:
+            return False
+        return (
+            self.url.identity_key == target_url.identity_key
+            and self.url.exact_host == target_url.exact_host
+            and self.url.port == target_url.port
+            and self.url.scope_path == target_url.scope_path
+            and self.url.functional_query == target_url.functional_query
+        )
+
+    def to_summary_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "id": self.source_id,
+            "base_url": self.base_url,
+            "identity_key": self.url.identity_key,
+            "source_identity_key": self.url.source_identity_key,
+            "destination_key": self.url.destination_key,
+            "languages": sorted(self.languages),
+            "contradictory": self.has_contradictory_metadata,
+        }
 
 
 @dataclass(frozen=True)
@@ -235,21 +297,61 @@ class CatalogExtension:
     domains: frozenset[str]
     base_urls: tuple[str, ...]
     catalog_repo: str
+    sources: tuple[CatalogSource, ...] = ()
+    package_languages: frozenset[str] = frozenset()
+    has_contradictory_metadata: bool = False
 
     def supports_languages(self, requested: frozenset[str]) -> bool:
         """Return True only when published catalog metadata unambiguously covers every requested language."""
-        valid_catalog_langs = {lang for lang in self.languages if not lang.startswith("unknown:")}
-        if not valid_catalog_langs:
+        if self.has_contradictory_metadata:
             return False
-        if not requested:
-            return False
-        if any(lang.startswith("unknown:") for lang in requested):
-            return False
-        if "all" in requested:
-            return "all" in valid_catalog_langs
-        if "all" in valid_catalog_langs:
-            return True
-        return requested <= valid_catalog_langs
+        return _languages_cover_request(self.languages, requested)
+
+    def matching_sources_for_url(
+        self,
+        target_url: NormalizedUrl | None,
+        *,
+        target_compact_name: str = "",
+    ) -> tuple[CatalogSource, ...]:
+        """Return published sources whose URL/subdomain/path/query specifically match target_url."""
+        if not target_url or not target_url.is_valid_domain or not self.sources:
+            return ()
+        exact_matches = [src for src in self.sources if src.matches_url(target_url)]
+        if not exact_matches or not target_compact_name:
+            return tuple(exact_matches)
+        # If multiple distinct named sources share the exact same URL inside one package, keep name-compatible ones if present
+        named_matches = [
+            src
+            for src in exact_matches
+            if src.compact_name == target_compact_name
+            or target_compact_name in src.compact_name
+            or src.compact_name in target_compact_name
+        ]
+        return tuple(named_matches) if named_matches else tuple(exact_matches)
+
+    def matching_sources_for_issue(self, target: ParsedIssue) -> tuple[CatalogSource, ...]:
+        """Return published sources inside this extension matching target's requested URL."""
+        return self.matching_sources_for_url(target.url, target_compact_name=target.compact_name)
+
+    def covering_sources_for_issue(self, target: ParsedIssue) -> tuple[CatalogSource, ...]:
+        """Return non-contradictory matched sources that strictly cover target's requested languages."""
+        if self.has_contradictory_metadata:
+            return ()
+        matched = self.matching_sources_for_issue(target)
+        if not matched or any(src.has_contradictory_metadata for src in matched):
+            return ()
+        combined_langs = frozenset().union(*(src.languages for src in matched))
+        if not _languages_cover_request(combined_langs, target.target_languages):
+            return ()
+        return tuple(
+            src
+            for src in matched
+            if src.languages and (not any(l.startswith("unknown:") for l in src.languages))
+        )
+
+    def covers_issue_request(self, target: ParsedIssue) -> bool:
+        """Return True only when this package has valid identity and source-specific URL + language coverage."""
+        return bool(self.pkg and self.name and self.covering_sources_for_issue(target))
 
     def to_summary_dict(self) -> dict:
         return {
@@ -261,6 +363,7 @@ class CatalogExtension:
             "languages": sorted(self.languages),
             "base_urls": list(self.base_urls),
             "catalog_repo": self.catalog_repo,
+            "sources": [src.to_summary_dict() for src in self.sources],
         }
 
 
@@ -276,12 +379,15 @@ class ExtensionCatalog:
                 self._by_type_domain.setdefault((ext.ext_type, dom), []).append(ext)
             if ext.compact_name:
                 self._by_type_name.setdefault((ext.ext_type, ext.compact_name), []).append(ext)
+            for src in ext.sources:
+                if src.compact_name:
+                    self._by_type_name.setdefault((ext.ext_type, src.compact_name), []).append(ext)
 
     def __bool__(self) -> bool:
         return bool(self.extensions)
 
     def find_matching_extensions(self, target: ParsedIssue) -> tuple[CatalogExtension, ...]:
-        """Return published catalog extensions verified to match target by type + domain + name."""
+        """Discover published catalog extensions by type + registrable domain + compatible name."""
         if not self.extensions or not target.url or not target.url.is_valid_domain:
             return ()
         types_to_check = (target.ext_type,) if target.ext_type else ("Mangá", "Anime")
@@ -295,6 +401,86 @@ class ExtensionCatalog:
                     seen_pkgs.add(ext.pkg)
                     matches.append(ext)
         return tuple(matches)
+
+    def verify_issue_fulfillment(
+        self,
+        target: ParsedIssue,
+    ) -> tuple[bool, str | None, CatalogExtension | None, tuple[CatalogSource, ...]]:
+        """Unified verification policy checking identity, exact source URL/path, per-source language, and metadata integrity."""
+        if not self.extensions:
+            return False, "catalog_empty", None, ()
+        if target.category != CATEGORY_NEW_EXTENSION:
+            return False, "live_catalog_invalid_category", None, ()
+        if target.ext_type not in ("Mangá", "Anime"):
+            return False, "live_catalog_missing_ext_type", None, ()
+        if not (target.url and target.url.is_valid_domain and target.compact_name):
+            return False, "live_catalog_incomplete_issue_identity", None, ()
+        if not target.target_languages or any(l.startswith("unknown:") for l in target.target_languages):
+            return False, "live_catalog_unverified_language", None, ()
+        if (
+            target.semantic_intent != INTENT_CREATE_EXTENSION
+            or target.extension_already_exists
+            or target.category_mismatch
+            or target.has_substantive_observations
+            or bool(target.symptom_topics)
+            or bool(target.error_signatures - {"cloudflare"})
+        ):
+            return False, "live_catalog_non_pure_creation", None, ()
+
+        matches = self.find_matching_extensions(target)
+        if not matches:
+            return False, "live_catalog_extension_missing", None, ()
+
+        source_matched: list[tuple[CatalogExtension, tuple[CatalogSource, ...]]] = []
+        for ext in matches:
+            ms = ext.matching_sources_for_issue(target)
+            if ms:
+                source_matched.append((ext, ms))
+        if not source_matched:
+            return False, "catalog_source_url_or_path_mismatch", matches[0], ()
+
+        bad_meta = [
+            (ext, ms)
+            for ext, ms in source_matched
+            if (
+                not ext.pkg
+                or not ext.name
+                or ext.has_contradictory_metadata
+                or any(src.has_contradictory_metadata or not src.languages for src in ms)
+            )
+        ]
+        valid_meta = [
+            (ext, ms)
+            for ext, ms in source_matched
+            if (
+                ext.pkg
+                and ext.name
+                and not ext.has_contradictory_metadata
+                and not any(src.has_contradictory_metadata for src in ms)
+            )
+        ]
+        if bad_meta and not valid_meta:
+            return False, "catalog_incomplete_or_contradictory_metadata", bad_meta[0][0], bad_meta[0][1]
+
+        covering: list[tuple[CatalogExtension, tuple[CatalogSource, ...]]] = []
+        for ext, _ in valid_meta:
+            cs = ext.covering_sources_for_issue(target)
+            if cs:
+                covering.append((ext, cs))
+        if not covering:
+            ref_ext, ref_srcs = valid_meta[0] if valid_meta else source_matched[0]
+            return False, "catalog_source_language_mismatch", ref_ext, ref_srcs
+
+        unique_pkgs = {ext.pkg for ext, _ in covering}
+        if len(unique_pkgs) != 1:
+            return False, "live_catalog_ambiguous_multiple_packages", covering[0][0], covering[0][1]
+        if bad_meta:
+            # Even if one package matches, another package for the exact same source URL had incomplete/contradictory metadata
+            bad_pkgs = {ext.pkg for ext, _ in bad_meta if ext.pkg}
+            if bad_pkgs - unique_pkgs:
+                return False, "live_catalog_ambiguous_multiple_packages", covering[0][0], covering[0][1]
+
+        return True, None, covering[0][0], covering[0][1]
 
     def find_by_name_and_type(self, compact_name: str, ext_type: str | None) -> tuple[CatalogExtension, ...]:
         """Lookup catalog extensions by compact name and optional ext_type."""
@@ -311,7 +497,7 @@ class ExtensionCatalog:
         return tuple(found)
 
     def digest(self) -> str:
-        """Return a stable 16-char digest of catalog entries for cache invalidation."""
+        """Return a stable 16-char digest of catalog entries including per-source URLs and languages."""
         if not self.extensions:
             return "empty"
         rows = sorted(
@@ -320,8 +506,16 @@ class ExtensionCatalog:
                 ext.ext_type,
                 ext.pkg,
                 ext.version,
-                ",".join(sorted(ext.languages)),
-                ",".join(sorted(ext.domains)),
+                ",".join(sorted(ext.package_languages)),
+                str(ext.has_contradictory_metadata),
+                ";".join(
+                    sorted(
+                        f"{src.source_id}:{src.compact_name}:{src.url.source_identity_key}:{','.join(sorted(src.languages))}:{src.has_contradictory_metadata}"
+                        for src in ext.sources
+                    )
+                )
+                if ext.sources
+                else ",".join(sorted(ext.domains)),
             )
             for ext in self.extensions
         )
@@ -333,16 +527,25 @@ class ExtensionCatalog:
         from .normalize import levenshtein_ratio
 
         t_name = target.compact_name
-        e_name = ext.compact_name
-        if not t_name or not e_name:
+        if not t_name:
             return False
-        if t_name == e_name or t_name in e_name or e_name in t_name:
-            return True
-        if target.url and target.url.host_stem and len(target.url.host_stem) >= 5:
-            if target.url.host_stem in e_name and target.url.host_stem in t_name:
-                if levenshtein_ratio(t_name, e_name) >= 0.72:
-                    return True
-        return levenshtein_ratio(t_name, e_name) >= 0.80
+        candidate_names = [ext.compact_name]
+        if target.url and target.url.is_valid_domain:
+            for src in ext.sources:
+                if src.url.identity_key == target.url.identity_key and src.compact_name:
+                    candidate_names.append(src.compact_name)
+        for e_name in candidate_names:
+            if not e_name:
+                continue
+            if t_name == e_name or t_name in e_name or e_name in t_name:
+                return True
+            if target.url and target.url.host_stem and len(target.url.host_stem) >= 5:
+                if target.url.host_stem in e_name and target.url.host_stem in t_name:
+                    if levenshtein_ratio(t_name, e_name) >= 0.72:
+                        return True
+            if levenshtein_ratio(t_name, e_name) >= 0.80:
+                return True
+        return False
 
 
 @dataclass(frozen=True)

@@ -16,6 +16,7 @@ from .models import (
     CATEGORY_NEW_EXTENSION,
     CATEGORY_UNKNOWN,
     CatalogExtension,
+    CatalogSource,
     ExtensionCatalog,
     ParsedIssue,
     RawIssue,
@@ -25,6 +26,7 @@ from .normalize import (
     compact_name,
     detect_extension_already_exists,
     detect_regression_signal,
+    detect_work_scope_cues,
     distinctive_name_tokens,
     extract_api_endpoints,
     extract_chapter_numbers,
@@ -33,6 +35,7 @@ from .normalize import (
     extract_feature_and_symptom_topics,
     extract_language_context,
     extract_specific_work_hint,
+    extract_url_locale,
     extract_urls_from_text,
     has_substantive_observations_text,
     infer_semantic_intent,
@@ -79,9 +82,16 @@ _FIELD_ALIASES: dict[str, str] = {
     "mensagem de erro": "error_message",
     "como reproduzir?": "reproduction",
     "informacoes complementares (opcional)": "additional_info",
+    "informacoes complementares": "additional_info",
     "informacoes adicionais": "additional_info",
+    "detalhes adicionais": "additional_info",
     "observacoes (opcional)": "notes",
     "observacoes": "notes",
+    "observacoes adicionais": "notes",
+    "observacoes adicionais (opcional)": "notes",
+    "descricao": "description",
+    "idioma do site": "lang",
+    "idiomas": "lang",
     "titulo ou resumo": "summary",
     "titulo ou resumo da sugestao": "summary",
     "descricao da melhoria": "description",
@@ -411,6 +421,15 @@ def parse_issue(raw: RawIssue, known_extensions: frozenset[str] = frozenset()) -
     ).strip()
 
     extra_urls = extract_urls_from_text("\n".join((description, reproduction, additional_info)))
+    raw_url_field = sections.get("url", "").strip()
+    if raw_url_field.startswith("/") and extra_urls:
+        base_u = extra_urls[0]
+        if base_u and base_u.is_valid_domain:
+            port_part = f":{base_u.port}" if base_u.port else ""
+            resolved_rel = f"{base_u.scheme}://{base_u.exact_host}{port_part}{raw_url_field}"
+            rel_obj = normalize_url(resolved_rel)
+            if rel_obj and rel_obj.is_valid_domain:
+                url_obj = rel_obj
     # If new_extension had no URL field parsed directly, try extra_urls
     if category == CATEGORY_NEW_EXTENSION and url_obj is None and extra_urls:
         url_obj = extra_urls[0]
@@ -433,9 +452,17 @@ def parse_issue(raw: RawIssue, known_extensions: frozenset[str] = frozenset()) -
     if category == CATEGORY_ENHANCEMENT:
         related_ext = _infer_related_extension_for_enhancement(sections, clean_title, summary, known_extensions)
 
+    obs_text_for_new_ext = "\n".join(
+        p for p in (sections.get("notes", ""), sections.get("description", ""), sections.get("additional_info", "")) if p
+    )
+    free_intent_title = "" if (category == CATEGORY_NEW_EXTENSION and name and compact_name(title_symptom) == compact) else title_symptom
     combined_symptom_text = "\n".join(p for p in (title_symptom, description, reproduction, additional_info) if p)
-    free_intent_text = "\n".join(
-        p for p in (title_symptom, sections.get("summary", ""), sections.get("description", ""), reproduction, additional_info) if p
+    free_intent_text = (
+        obs_text_for_new_ext
+        if (category == CATEGORY_NEW_EXTENSION and not free_intent_title)
+        else "\n".join(
+            p for p in (free_intent_title, sections.get("summary", ""), sections.get("description", ""), reproduction, additional_info) if p
+        )
     )
     error_sigs, tech_tokens = extract_error_signatures(combined_symptom_text)
     if not version_tuple and category == CATEGORY_BUG:
@@ -482,6 +509,7 @@ def parse_issue(raw: RawIssue, known_extensions: frozenset[str] = frozenset()) -
     mentioned_chapters = extract_chapter_numbers(combined_symptom_text)
     mentioned_episodes = extract_episode_numbers(combined_symptom_text)
     api_endpoints = extract_api_endpoints(combined_symptom_text)
+    has_global_scope, has_unnamed_specific = detect_work_scope_cues(combined_symptom_text)
     dead_ev = classify_dead_source_evidence(free_intent_text)
 
     semantic_intent, secondary_intents, inferred_cat, cat_mismatch = infer_semantic_intent(
@@ -520,22 +548,25 @@ def parse_issue(raw: RawIssue, known_extensions: frozenset[str] = frozenset()) -
 
     sparse = is_sparse_description(description, f"{title_symptom} {additional_info}") and not error_sigs
 
-    # Deterministic structured fingerprint (includes notes & semantic intent so observation edits re-evaluate)
+    # Deterministic structured fingerprint (includes source_identity_key, scope cues, reproduction & semantic intent)
     fp_parts = [
         category,
         inferred_cat,
         semantic_intent,
         ext_type or "",
         compact,
-        url_obj.destination_key or url_obj.identity_key if url_obj else "",
-        old_url_obj.destination_key or old_url_obj.identity_key if old_url_obj else "",
-        new_url_obj.destination_key or new_url_obj.identity_key if new_url_obj else "",
+        (url_obj.source_identity_key or url_obj.destination_key or url_obj.identity_key) if url_obj else "",
+        (url_obj.destination_key or url_obj.identity_key) if url_obj else "",
+        (old_url_obj.destination_key or old_url_obj.identity_key) if old_url_obj else "",
+        (new_url_obj.destination_key or new_url_obj.identity_key) if new_url_obj else "",
         version_raw,
         declared_code,
         ",".join(sorted(target_langs)),
         ",".join(sorted(existing_only_langs)),
         ",".join(sorted(affected_parts)),
         specific_work_hint,
+        str(has_global_scope),
+        str(has_unnamed_specific),
         ",".join(sorted(mentioned_chapters)),
         ",".join(sorted(mentioned_episodes)),
         ",".join(sorted(api_endpoints)),
@@ -593,14 +624,16 @@ def parse_issue(raw: RawIssue, known_extensions: frozenset[str] = frozenset()) -
         mentioned_episodes=mentioned_episodes,
         api_endpoints=api_endpoints,
         title_symptom=title_symptom,
+        has_global_work_scope=has_global_scope,
+        has_unnamed_specific_work_scope=has_unnamed_specific,
     )
 
 
-_CATALOG_PREFIX_RE = re.compile(r"^(?:aniyomi|tachiyomi|mihon)\s*:\s*", re.IGNORECASE)
+_CATALOG_PREFIX_RE = re.compile(r"^(?:aniyomi|tachiyomi|mihon|nox)\s*:\s*", re.IGNORECASE)
 
 
 def parse_catalog_entries(raw_entries: list[dict], ext_type: str, catalog_repo: str) -> list[CatalogExtension]:
-    """Parse entries from a Project Nox index.min.json catalog into normalized CatalogExtension models."""
+    """Parse entries from a Project Nox index.min.json catalog preserving per-source URL and language bindings."""
     parsed: list[CatalogExtension] = []
     for entry in raw_entries:
         if not isinstance(entry, dict):
@@ -609,14 +642,42 @@ def parse_catalog_entries(raw_entries: list[dict], ext_type: str, catalog_repo: 
         clean_name = _CATALOG_PREFIX_RE.sub("", raw_name).strip()
         if not clean_name:
             continue
-        langs: set[str] = set()
-        langs.update(normalize_language_code(str(entry.get("lang") or ""), allow_short_iso=True))
+        entry_langs = normalize_language_code(str(entry.get("lang") or ""), allow_short_iso=True)
+        raw_sources = [s for s in (entry.get("sources") or ()) if isinstance(s, dict)]
+
         domains: set[str] = set()
         base_urls: list[str] = []
-        for src in entry.get("sources") or ():
-            if not isinstance(src, dict):
-                continue
-            langs.update(normalize_language_code(str(src.get("lang") or ""), allow_short_iso=True))
+        catalog_sources: list[CatalogSource] = []
+
+        for src in raw_sources:
+            raw_src_name = str(src.get("name") or "").strip()
+            src_name = _CATALOG_PREFIX_RE.sub("", raw_src_name).strip() or clean_name
+            src_compact = compact_name(src_name) or name_without_tld(src_name)
+            src_id = str(src.get("id") or "").strip()
+            src_langs = normalize_language_code(str(src.get("lang") or ""), allow_short_iso=True)
+
+            base_contradictory = False
+            if src_langs:
+                # Extension package-level 'all' is a container marker for multi-source/universal APKs;
+                # only flag contradiction when single-source entry declares a conflicting concrete language.
+                if (
+                    len(raw_sources) == 1
+                    and entry_langs
+                    and "all" not in entry_langs
+                    and not any(l.startswith("unknown:") for l in entry_langs)
+                    and "all" not in src_langs
+                    and not any(l.startswith("unknown:") for l in src_langs)
+                    and not (src_langs <= entry_langs)
+                ):
+                    base_contradictory = True
+                eff_langs = src_langs
+            elif len(raw_sources) == 1 and entry_langs:
+                # Single-source entry without per-source lang safely inherits extension-level lang.
+                eff_langs = entry_langs
+            else:
+                # Multi-source package where an individual source omits lang: never propagate another source's or global lang.
+                eff_langs = frozenset()
+
             raw_base = str(src.get("baseUrl") or "").strip()
             for candidate_u in re.split(r"[\s,]+", raw_base):
                 if not candidate_u:
@@ -626,6 +687,31 @@ def parse_catalog_entries(raw_entries: list[dict], ext_type: str, catalog_repo: 
                     domains.add(u_obj.identity_key)
                     if candidate_u not in base_urls:
                         base_urls.append(candidate_u)
+                    url_loc = extract_url_locale(u_obj)
+                    url_lang_contradicts = bool(
+                        url_loc
+                        and eff_langs
+                        and "all" not in eff_langs
+                        and not any(l.startswith("unknown:") for l in eff_langs)
+                        and url_loc not in eff_langs
+                    )
+                    catalog_sources.append(
+                        CatalogSource(
+                            name=src_name,
+                            compact_name=src_compact,
+                            source_id=src_id,
+                            base_url=candidate_u,
+                            url=u_obj,
+                            languages=eff_langs,
+                            has_contradictory_metadata=(base_contradictory or url_lang_contradicts),
+                        )
+                    )
+
+        non_contradictory_langs: set[str] = set()
+        for src_obj in catalog_sources:
+            if not src_obj.has_contradictory_metadata:
+                non_contradictory_langs.update(src_obj.languages)
+        ext_contradictory = bool(catalog_sources and all(s.has_contradictory_metadata for s in catalog_sources))
         version_str = str(entry.get("version") or "").strip()
         parsed.append(
             CatalogExtension(
@@ -636,10 +722,13 @@ def parse_catalog_entries(raw_entries: list[dict], ext_type: str, catalog_repo: 
                 apk=str(entry.get("apk") or "").strip(),
                 version=version_str,
                 version_tuple=parse_version(version_str),
-                languages=frozenset(langs),
+                languages=frozenset(non_contradictory_langs),
                 domains=frozenset(domains),
                 base_urls=tuple(base_urls),
                 catalog_repo=catalog_repo,
+                sources=tuple(catalog_sources),
+                package_languages=entry_langs,
+                has_contradictory_metadata=ext_contradictory,
             )
         )
     return parsed

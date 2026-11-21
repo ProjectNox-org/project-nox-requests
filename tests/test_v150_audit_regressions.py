@@ -930,7 +930,7 @@ def test_t4_10_target_edited_after_comment_and_before_label_downgrades():
 
 
 def test_t4_11_cache_migrates_from_v140_to_v150_and_blocks_stale_close(tmp_path, capsys):
-    assert RULE_ENGINE_VERSION == "1.5.0"
+    assert RULE_ENGINE_VERSION >= "1.5.0"
     b200 = _bug(200, "Sushi Manga — Naruto não carrega", "Ao abrir o leitor aparece No pages found.")
     b201 = _bug(201, "Sushi Manga — One Piece não carrega", "Ao abrir o leitor aparece No pages found.", created_at="2026-11-02T10:00:00Z")
     cache_file = tmp_path / "cache_140.json"
@@ -961,7 +961,7 @@ def test_t4_11_cache_migrates_from_v140_to_v150_and_blocks_stale_close(tmp_path,
     rc = run_cli(["--mode", "reconcile", "--cache-file", str(cache_file)], client_override=api)
     assert rc == 0
     out = json.loads(capsys.readouterr().out)
-    assert out["rule_version"] == "1.5.0"
+    assert out["rule_version"] == RULE_ENGINE_VERSION
     assert out["effective_mode"] == "backfill"
     assert out["skipped_cached_count"] == 0
     assert api.issues[201]["state"] == "open"
@@ -991,7 +991,7 @@ def test_t4_13_cli_reconcile_restores_v150_cache_with_zero_api_reprocessing(tmp_
     rc1 = run_cli(["--mode", "backfill", "--cache-file", str(cache_file)], client_override=api)
     assert rc1 == 0
     out1 = json.loads(capsys.readouterr().out)
-    assert out1["rule_version"] == "1.5.0"
+    assert out1["rule_version"] == RULE_ENGINE_VERSION
     assert api.issues[521]["state"] == "closed"
 
     api.api_calls_made = 0

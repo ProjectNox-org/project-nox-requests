@@ -160,6 +160,39 @@ def _compute_registrable_domain(host: str) -> str:
     return last_two
 
 
+_HOMEPAGE_NAV_SEGMENTS = frozenset({
+    "home", "index", "index.html", "index.php", "inicio", "main", "principal", "ranking-do-site",
+})
+
+
+def _compute_scope_path(norm_path: str) -> str:
+    """Fold strictly benign homepage navigation segments while preserving content/locale/section paths."""
+    stripped = (norm_path or "/").strip("/")
+    if not stripped or stripped in _HOMEPAGE_NAV_SEGMENTS:
+        return "/"
+    parts = stripped.split("/")
+    if len(parts) == 2 and _map_locale_label(parts[0]) and parts[1] in _HOMEPAGE_NAV_SEGMENTS:
+        return f"/{parts[0]}"
+    return norm_path
+
+
+def _normalize_functional_query(raw_query: str) -> str:
+    """Keep sorted non-volatile, non-secret query parameters (with secret-like values redacted)."""
+    if not raw_query:
+        return ""
+    kept: list[tuple[str, str]] = []
+    for k, v in parse_qsl(raw_query, keep_blank_values=True):
+        kl = strip_accents(k or "").strip().lower()
+        if not kl or kl in _SENSITIVE_QUERY_KEYS or kl in _VOLATILE_QUERY_KEYS or kl.startswith("utm_"):
+            continue
+        vl = "<redacted>" if _looks_like_secret_value(v) else strip_accents(v or "").strip().lower()
+        kept.append((kl, vl))
+    if not kept:
+        return ""
+    kept.sort()
+    return urlencode(kept, safe="/")
+
+
 def normalize_url(raw_value: str) -> NormalizedUrl | None:
     """Safely parse and normalize a URL or domain string without executing/fetching it."""
     raw = str(raw_value or "").strip()
@@ -237,6 +270,9 @@ def normalize_url(raw_value: str) -> NormalizedUrl | None:
             exact_host="",
             subdomain="",
             port=None,
+            scope_path="",
+            functional_query="",
+            source_identity_key=f"id:{ident}",
         )
 
     reg_domain = _compute_registrable_domain(exact_host)
@@ -248,15 +284,21 @@ def normalize_url(raw_value: str) -> NormalizedUrl | None:
     is_shared = (reg_domain in SHARED_HOST_DOMAINS) or (exact_host in SHARED_HOST_DOMAINS) or (host in SHARED_HOST_DOMAINS)
     host_stem = reg_domain.split(".", 1)[0]
 
-    # Normalize path (strip trailing slashes; preserve meaningful segments)
-    path = re.sub(r"/+", "/", parsed.path or "/").strip("/")
+    # Decode percent-encoding, normalize repeated slashes, lowercase path, and keep functional query params
+    raw_path = unquote(parsed.path or "/")
+    raw_path = re.sub(r"[\x00-\x1f\x7f]+", "", raw_path)
+    path = re.sub(r"/+", "/", raw_path).strip("/").lower()
     norm_path = f"/{path}" if path else "/"
-    dest_path = norm_path.lower() if norm_path != "/" else ""
+    scope_path = _compute_scope_path(norm_path)
+    func_query = _normalize_functional_query(parsed.query or "")
+    dest_path = norm_path if norm_path != "/" else ""
+    scope_part = scope_path if scope_path != "/" else ""
+    query_part = f"?{func_query}" if func_query else ""
     port_part = f":{norm_port}" if norm_port else ""
-    destination_key = f"dest:{exact_host}{port_part}{dest_path}"
+    destination_key = f"dest:{exact_host}{port_part}{dest_path}{query_part}"
+    source_identity_key = f"src:{exact_host}{port_part}{scope_part}{query_part}"
 
-    # Build canonical general site identity key:
-    # - For shared hosting (github.io, t.me, blogspot, workers.dev), keep subdomain + 1st path segment if community host.
+    # Build canonical general site identity key (candidate discovery only):
     if is_shared:
         if host in ("t.me", "telegram.me", "discord.gg", "discord.com", "linktr.ee", "sites.google.com"):
             first_seg = path.split("/", 1)[0].lower() if path else ""
@@ -281,7 +323,41 @@ def normalize_url(raw_value: str) -> NormalizedUrl | None:
         exact_host=exact_host,
         subdomain=subdomain,
         port=norm_port,
+        scope_path=scope_path,
+        functional_query=func_query,
+        source_identity_key=source_identity_key,
     )
+
+
+def compare_source_urls(
+    url_a: NormalizedUrl | None,
+    url_b: NormalizedUrl | None,
+    *,
+    ext_type_a: str | None = None,
+    ext_type_b: str | None = None,
+    allow_default_type_landing: bool = False,
+) -> tuple[bool, str | None]:
+    """Compare two normalized URLs strictly using exact host, port, scope path, and functional query."""
+    if not url_a or not url_b or not url_a.is_valid_domain or not url_b.is_valid_domain:
+        return False, "missing_or_invalid_url"
+    if url_a.identity_key != url_b.identity_key:
+        return False, "different_domains"
+    if url_a.exact_host != url_b.exact_host:
+        return False, "subdomain_divergence"
+    if url_a.port != url_b.port:
+        return False, "port_divergence"
+    if url_a.functional_query != url_b.functional_query:
+        return False, "query_divergence"
+    if url_a.scope_path != url_b.scope_path:
+        if (
+            allow_default_type_landing
+            and ext_type_a == ext_type_b == "Mangá"
+            and {url_a.scope_path, url_b.scope_path} in ({"/", "/manga"}, {"/", "/mangas"})
+            and "manga" in url_a.host_stem
+        ):
+            return True, None
+        return False, "path_divergence"
+    return True, None
 
 
 def extract_urls_from_text(text: str) -> tuple[NormalizedUrl, ...]:
@@ -306,8 +382,9 @@ def extract_urls_from_text(text: str) -> tuple[NormalizedUrl, ...]:
             continue
         if parsed.host in IGNORED_ATTACHMENT_HOSTS:
             continue
-        if parsed.identity_key not in seen_keys:
-            seen_keys.add(parsed.identity_key)
+        dedup_key = parsed.source_identity_key or parsed.destination_key or parsed.identity_key
+        if dedup_key not in seen_keys:
+            seen_keys.add(dedup_key)
             found.append(parsed)
     return tuple(found)
 
@@ -663,7 +740,7 @@ _SYMPTOM_TOPIC_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("missing_content", re.compile(r"\b(?:nao\s+(?:esta|estao)\s+aparecendo\s+todos|faltando\s+(?:capitulos?|episodios?|paginas?|obras?)|nao\s+exibe\s+(?:o\s+)?conteudo|so\s+mostra\s+\d+|ausente[s]?)\b", re.I)),
     ("no_pages_or_empty", re.compile(r"\b(?:no\s+pages\s+found|nenhuma\s+pagina|sem\s+paginas|paginas?\s+nao\s+carregam?|paginas?\s+brancas?|imagens?\s+nao\s+carregam?|imagens?\s+quebradas?)\b", re.I)),
     ("audio_subtitle", re.compile(r"\b(?:legenda[s]?|dublado|audio|dessincronizad[ao]|sem\s+audio|sem\s+legenda)\b", re.I)),
-    ("vip_paywall", re.compile(r"\b(?:vip|premium|assinatura|moedas?|coins?|pago|paywall)\b", re.I)),
+    ("vip_paywall", re.compile(r"\b(?:paywall|moedas?|coins?|exige\s+(?:vip|premium|assinatura)|area\s+vip|somente\s+(?:vip|premium|pago)|vip\s+(?:bloquead|erro|pago)|premium\s+(?:bloquead|erro|pago))\b", re.I)),
     ("infinite_loading", re.compile(r"\b(?:carregamento\s+infinito|carregando\s+infinitamente|loop\s+infinito|nunca\s+carrega|nao\s+sai\s+do\s+carregando)\b", re.I)),
     ("site_redesign", re.compile(r"\b(?:reformulou|mudou\s+(?:o\s+)?site|mudou\s+(?:a\s+)?interface|mudou\s+(?:o\s+)?layout|novo\s+layout|nova\s+interface|estrutura\s+do\s+site)\b", re.I)),
     ("slow_download", re.compile(r"\b(?:lentidao|muito\s+lento|demora(?:ndo)?\s+(?:muito\s+)?(?:para|pra)?\s*baixar|download\s+lento)\b", re.I)),
@@ -857,8 +934,10 @@ _NON_WORK_TITLE_TOKENS = frozenset({
     "erro", "erros", "error", "errors", "problema", "problemas", "bug", "bugs",
     "falha", "falhas", "leitor", "capitulo", "capitulos", "pagina", "paginas",
     "imagem", "imagens", "capa", "capas", "sinopse", "titulo", "titulos",
+    "serie", "series", "historia", "historias", "novel", "novels", "hq", "livro",
+    "especifica", "especifico", "especificas", "especificos", "exclusivo", "exclusiva",
     "video", "videos", "player", "busca", "pesquisa", "filtro", "filtros",
-    "login", "conta", "autenticacao", "catalogo", "popular", "populares",
+    "login", "conta", "autenticacao", "cadastro", "catalogo", "popular", "populares",
     "recentes", "historico", "favoritos", "biblioteca", "download", "downloads",
     "lentidao", "lento", "atualizacao", "instalacao", "metadados", "detalhes",
     "fonte", "extensao", "extensoes", "site", "app", "aplicativo", "api",
@@ -871,6 +950,7 @@ _NON_WORK_TITLE_TOKENS = frozenset({
     "buffer", "audio", "legenda", "legendas", "vip", "paywall", "get", "post",
     "portugues", "ingles", "espanhol", "japones", "english", "spanish",
     "webview", "android", "windows", "linux", "github", "discord", "chrome",
+    "obra", "obras", "geral", "ocorre", "ocorrem", "acontece", "aparece",
 })
 
 _NON_WORK_LEADING_TOKENS = frozenset({
@@ -878,16 +958,42 @@ _NON_WORK_LEADING_TOKENS = frozenset({
     "dos", "das", "um", "uma", "o", "a", "os", "as", "e", "ou", "que", "se", "por",
     "erro", "falha", "problema", "bug", "nao", "sem", "extensao", "site",
     "app", "http", "https", "json", "endpoint", "rota", "player", "leitor",
-    "busca", "pesquisa", "login", "capitulo", "capitulos", "cap", "episodio",
-    "episodios", "ep", "pagina", "paginas", "todas", "todos", "alguma", "algum",
-    "qualquer", "nenhum", "nenhuma", "tentar", "abrir", "ler", "baixar",
-    "entrar", "selecionar", "clicar", "acessar", "ir",
+    "busca", "pesquisa", "login", "cadastro", "capitulo", "capitulos", "cap",
+    "episodio", "episodios", "ep", "pagina", "paginas", "todas", "todos",
+    "alguma", "algum", "qualquer", "nenhum", "nenhuma", "tentar", "abrir", "ler",
+    "baixar", "entrar", "selecionar", "clicar", "acessar", "ir", "assistir",
+    "serie", "series", "titulo", "titulos", "historia", "historias", "obra", "obras",
+    "especifica", "especifico", "exclusivo", "exclusiva", "determinado", "determinada",
 })
 
 _NON_WORK_NAVIGATION_WORDS = frozenset({
-    "tentar", "clicar", "selecionar", "entrar", "abrir", "baixar",
+    "tentar", "clicar", "selecionar", "entrar", "abrir", "baixar", "assistir",
     "qualquer", "nenhum", "nenhuma", "todas", "todos", "alguma", "algum",
+    "especifico", "especifica", "especificos", "especificas",
 })
+
+_GLOBAL_WORK_SCOPE_RE = re.compile(
+    r"\b(?:todas?\s+as?\s+(?:obras?|mangas?|animes?|series?|historias?|titulos?)|"
+    r"todos?\s+os?\s+(?:mangas?|animes?|capitulos?|episodios?|titulos?)|"
+    r"qualquer\s+(?:obra|manga|anime|serie|titulo|historia|capitulo|episodio)|"
+    r"em\s+geral|no\s+catalogo\s+inteiro|na\s+extensao\s+toda)\b",
+    re.IGNORECASE,
+)
+
+_UNNAMED_SPECIFIC_SCOPE_RE = re.compile(
+    r"\b(?:(?:um|uma|algum|alguma|determinad[oa]|cert[oa])\s+(?:obra|manga|anime|serie|titulo|historia|capitulo|episodio)\s+especific[oa]|"
+    r"(?:obras?|capitulos?|episodios?)\s+especific[oa]s?|"
+    r"especific[oa]\s+(?:de\s+)?(?:uma|alguma)\s+obra)\b",
+    re.IGNORECASE,
+)
+
+
+def detect_work_scope_cues(text: str) -> tuple[bool, bool]:
+    """Detect explicit global-scope ('todas as obras', 'qualquer capítulo') vs unnamed specific-scope cues."""
+    norm = normalize_text(text, preserve_urls=False)
+    if not norm:
+        return False, False
+    return bool(_GLOBAL_WORK_SCOPE_RE.search(norm)), bool(_UNNAMED_SPECIFIC_SCOPE_RE.search(norm))
 
 
 def _is_valid_work_candidate(cand: str, ext_compact: str) -> str:
@@ -912,27 +1018,53 @@ def _is_valid_work_candidate(cand: str, ext_compact: str) -> str:
     return norm
 
 
+def _normalize_multi_work_candidate(raw_cand: str, ext_compact: str) -> str:
+    """Split 'Naruto e Bleach' into a sorted multi-work identifier 'bleach + naruto' if both halves are valid works."""
+    stripped = strip_accents(raw_cand or "").strip()
+    if re.search(r"\s+(?:e|and)\s+", stripped, flags=re.IGNORECASE):
+        parts = re.split(r"\s+(?:e|and)\s+", stripped, flags=re.IGNORECASE)
+        if len(parts) >= 2:
+            valid_parts = [_is_valid_work_candidate(p, ext_compact) for p in parts]
+            if all(valid_parts) and len(set(valid_parts)) >= 2:
+                return " + ".join(sorted(set(valid_parts)))
+    return _is_valid_work_candidate(stripped, ext_compact)
+
+
 def extract_specific_work_hint(title_symptom: str, description: str, extension_name: str = "") -> str:
-    """Extract a specific manga/anime title hint when issue scopes the problem to one work."""
+    """Extract specific manga/anime/series title hint(s) when issue scopes the problem to concrete work(s)."""
+    work_nouns = r"(?:obra|manga|anime|manhwa|manhua|webtoon|serie|titulo|historia|novel|light\s+novel|comic|hq)"
+    conj_stop = r"e\s+(?:abrir|clicar|selecionar|retornando|tentar|ler|assistir|carregar|entrar|acessar|ir|nao|sem|com|quando|ao|no|na)\b"
+    stop_after = (
+        rf"(?=\s*,\s*|\s+(?:verbda|no|na|ao|quando|esta|estao|nao|aparece|acontece|ocorre|ocorrem|"
+        rf"apresenta|retorna|falha|carrega|com|dando|da|de|do|em|para|capitulos?|episodios?|{conj_stop})\b|$)"
+    )
     patterns = (
         re.compile(
-            r"\b(?:apenas|so|somente)\s+(?:na|no|em)\s+(?:obra|manga|anime|manhwa|manhua|webtoon)\s+"
-            r"([a-z0-9][a-z0-9\s'-]{1,32}?)(?=\s+(?:da|de|do|dos|das|verbda|esta|estao|nao|capitulo|capitulos|episodio|episodios|erro|aparece|acontece|apresenta|retorna|falha|carrega|no|na|para|ao|com|e)\b|$)"
+            rf"\b(?:apenas|so|somente)\s+(?:na|no|em)\s+{work_nouns}\s+"
+            rf"([a-z0-9][a-z0-9\s'-]{{1,34}}?)(?=\s*,\s*|\s+(?:da|de|do|dos|das|verbda|esta|estao|nao|capitulo|capitulos|episodio|episodios|erro|aparece|acontece|ocorre|ocorrem|apresenta|retorna|falha|carrega|no|na|para|ao|com|{conj_stop})\b|$)"
         ),
         re.compile(
-            r"(?:/(?:chapters?|episodes?)/|\b(?:capitulos?|cap\.?|episodios?|ep\.?)\s*#?)\d+(?:\.\d+)?\s+(?:de|da|do)\s+(?:obra\s+|manga\s+|anime\s+|manhwa\s+)?"
-            r"([a-z0-9][a-z0-9\s'-]{1,30}?)(?=\s+(?:verbda|no|na|ao|quando|esta|estao|nao|aparece|acontece|apresenta|retorna|falha|carrega|com|dando|em|para|e)\b|$)"
+            rf"(?:/(?:chapters?|episodes?)/|\b(?:capitulos?|cap\.?|episodios?|ep\.?)\s*#?)\d+(?:\.\d+)?\s+(?:de|da|do)\s+(?:{work_nouns}\s+)?"
+            rf"([a-z0-9][a-z0-9\s'-]{{1,34}}?){stop_after}"
         ),
         re.compile(
-            r"\b(?:na|da|do|de|pela)\s+obra\s+([a-z0-9][a-z0-9\s'-]{1,30}?)"
-            r"(?=\s+(?:verbda|no|na|ao|quando|esta|estao|nao|aparece|acontece|apresenta|retorna|falha|carrega|com|dando|da|de|do|em|para|e|retornando|abrir|clicar|selecionar)\b|$)"
+            rf"\b(?:na|da|do|de|no|pela|pelo|em)\s+{work_nouns}\s+([a-z0-9][a-z0-9\s'-]{{1,34}}?)"
+            rf"(?=\s*,\s*|\s+(?:verbda|no|na|ao|quando|esta|estao|nao|aparece|acontece|ocorre|ocorrem|apresenta|retorna|falha|carrega|com|dando|da|de|do|em|para|retornando|abrir|clicar|selecionar|capitulos?|episodios?|{conj_stop})\b|$)"
         ),
         re.compile(
-            r"\b(?:no|do)\s+(?:manga|anime|manhwa|manhua|webtoon)\s+([a-z0-9][a-z0-9\s'-]{1,30}?)"
-            r"(?=\s+(?:verbda|no|na|ao|quando|esta|estao|nao|aparece|acontece|apresenta|retorna|falha|carrega|com|dando|da|de|do|em|para|e|capitulos?|episodios?)\b|$)"
+            rf"\b(?:problema|erro|falha|bug)\s+exclusiv[oa]\s+(?:de|da|do|em|na|no)\s+(?:{work_nouns}\s+)?"
+            rf"([a-z0-9][a-z0-9\s'-]{{1,34}}?){stop_after}"
         ),
         re.compile(
-            r"\b(?:manga|anime)\s+([a-z0-9][a-z0-9-]{2,28}(?:\s+[a-z0-9-]{2,18}){0,2})\s+"
+            rf"\b(?:ocorre|acontece|aparece|falha)?\s*(?:somente|apenas|so|exclusivamente)\s+(?:em|no|na)\s+(?:{work_nouns}\s+)?"
+            rf"([a-z0-9][a-z0-9\s'-]{{1,34}}?){stop_after}"
+        ),
+        re.compile(
+            rf"\b(?:ao|quando\s+tento|tentando)\s+(?:abrir|ler|assistir|carregar)\s+(?:o\s+|a\s+)?(?:{work_nouns}\s+)?"
+            rf"([a-z0-9][a-z0-9\s'-]{{1,34}}?){stop_after}"
+        ),
+        re.compile(
+            r"\b(?:manga|anime|serie|obra)\s+([a-z0-9][a-z0-9-]{2,28}(?:\s+[a-z0-9-]{2,18}){0,2})\s+"
             r"(?:capitulos?\s+errados?|nao\s+carrega|trocad[oa])"
         ),
     )
@@ -946,44 +1078,63 @@ def extract_specific_work_hint(title_symptom: str, description: str, extension_n
     if not chunks:
         chunks.append(f"{title_symptom} {description}")
 
+    collected_hints: list[str] = []
     for chunk in chunks:
         raw_marked = re.sub(r"\bdá\b", " verbda ", chunk, flags=re.IGNORECASE)
-        combined = re.sub(
-            r"[.,;:!?]+(?=\s|$)",
-            " ",
-            normalize_text(raw_marked, preserve_urls=False),
-        )
-        combined = re.sub(r"\s+", " ", combined).strip()
+        # Keep clause-level comma delimiter outside numbers/decimals
+        comma_kept = re.sub(r",\s+", " , ", raw_marked)
+        comma_kept = re.sub(r"[.;:!?]+(?=\s|$)", " ", comma_kept)
+        combined = normalize_text(comma_kept.replace(" , ", "__COMMA__"), preserve_urls=False)
+        combined = re.sub(r"\s+", " ", combined.replace("__comma__", " , ")).strip()
         for pat in patterns:
             m = pat.search(combined)
             if m:
-                hint = _is_valid_work_candidate(m.group(1), ext_compact)
-                if hint:
-                    return hint
-        m_cap_em = re.search(
-            r"\bem\s+([A-ZÀ-Ý][A-Za-zÀ-ÿ0-9'-]{2,20}(?:\s+(?:[A-ZÀ-Ý0-9][A-Za-zÀ-ÿ0-9'-]{1,20}|of|the|no|de|da)){0,3})\s*[.,;:!?]*$",
-            chunk.strip(),
-        )
-        if m_cap_em:
-            hint = _is_valid_work_candidate(m_cap_em.group(1), ext_compact)
-            if hint:
-                return hint
+                hint = _normalize_multi_work_candidate(m.group(1), ext_compact)
+                if hint and hint not in collected_hints:
+                    collected_hints.append(hint)
+                    break
+        else:
+            # Multi-work capitalized mention like "em Naruto e Bleach"
+            m_multi_cap = re.search(
+                r"\b(?:em|no|na)\s+([A-ZÀ-Ý][A-Za-zÀ-ÿ0-9'-]{2,20}(?:\s+[A-ZÀ-Ý0-9][A-Za-zÀ-ÿ0-9'-]{1,20}){0,2})\s+e\s+([A-ZÀ-Ý][A-Za-zÀ-ÿ0-9'-]{2,20}(?:\s+[A-ZÀ-Ý0-9][A-Za-zÀ-ÿ0-9'-]{1,20}){0,2})\b",
+                chunk.strip(),
+            )
+            if m_multi_cap:
+                w1 = _is_valid_work_candidate(m_multi_cap.group(1), ext_compact)
+                w2 = _is_valid_work_candidate(m_multi_cap.group(2), ext_compact)
+                if w1 and w2:
+                    combo = " + ".join(sorted({w1, w2}))
+                    if combo not in collected_hints:
+                        collected_hints.append(combo)
+                    continue
+            # Capitalized work at clause end ("... em Naruto.")
+            m_cap_em = re.search(
+                r"\bem\s+([A-ZÀ-Ý][A-Za-zÀ-ÿ0-9'-]{2,20}(?:\s+(?:[A-ZÀ-Ý0-9][A-Za-zÀ-ÿ0-9'-]{1,20}|of|the|no|de|da)){0,3})\s*[.,;:!?]*$",
+                chunk.strip(),
+            )
+            if m_cap_em:
+                hint = _is_valid_work_candidate(m_cap_em.group(1), ext_compact)
+                if hint and hint not in collected_hints:
+                    collected_hints.append(hint)
 
-    # Also extract work references placed directly in the title ("Naruto não carrega", "One Piece — No pages found")
+    if collected_hints:
+        return " + ".join(sorted(set(collected_hints))) if len(set(collected_hints)) > 1 else collected_hints[0]
+
+    # Also extract work references placed directly in the title ("Naruto não carrega", "One Piece — No pages found", "Naruto e Bleach")
     clean_ts = strip_accents(title_symptom or "").strip()
     if clean_ts:
         parts_ts = re.split(r"\s+(?:—|–|-|:)\s+", clean_ts, maxsplit=1)
         if len(parts_ts) == 2:
-            left = _is_valid_work_candidate(parts_ts[0], ext_compact)
+            left = _normalize_multi_work_candidate(parts_ts[0], ext_compact)
             if left:
                 return left
         norm_ts = normalize_text(re.sub(r"\bdá\b", " verbda ", title_symptom or "", flags=re.IGNORECASE), preserve_urls=False)
         m_title = re.match(
-            r"^([a-z0-9][a-z0-9\s'-]{1,34}?)\s+(?:nao\s+(?:carrega|abre|funciona|reproduz|aparece)|esta\s+sem\s+(?:paginas?|capitulos?)|sem\s+(?:paginas?|capitulos?)|no\s+pages\s+found|com\s+(?:erro|falha|problema)|capitulos?\s+errados?|fora\s+de\s+ordem)\b",
+            r"^([a-z0-9][a-z0-9\s'-]{1,34}?)\s+(?:nao\s+(?:carrega|carregam|abre|abrem|funciona|funcionam|reproduz|reproduzem|aparece|aparecem)|esta\s+sem\s+(?:paginas?|capitulos?)|sem\s+(?:paginas?|capitulos?)|no\s+pages\s+found|com\s+(?:erro|falha|problema)|capitulos?\s+errados?|fora\s+de\s+ordem)\b",
             norm_ts,
         )
         if m_title:
-            cand_w = _is_valid_work_candidate(m_title.group(1), ext_compact)
+            cand_w = _normalize_multi_work_candidate(m_title.group(1), ext_compact)
             if cand_w:
                 return cand_w
     return ""

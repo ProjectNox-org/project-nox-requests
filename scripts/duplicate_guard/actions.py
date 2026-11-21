@@ -333,7 +333,7 @@ class GuardActionExecutor:
         self,
         live_parsed: ParsedIssue,
     ) -> tuple[bool, str | None, CatalogExtension | None]:
-        """Confirm live official catalog publication directly before closing already_fulfilled_creation."""
+        """Confirm live official catalog publication directly using unified source-level identity and language coverage."""
         if live_parsed.category != CATEGORY_NEW_EXTENSION:
             return False, "live_catalog_invalid_category", None
         if live_parsed.ext_type not in ("Mangá", "Anime"):
@@ -391,18 +391,10 @@ class GuardActionExecutor:
 
         live_entries = parse_catalog_entries(raw_entries, live_parsed.ext_type, target_repo)
         live_catalog = ExtensionCatalog(live_entries)
-        matches = live_catalog.find_matching_extensions(live_parsed)
-        covering = [
-            ext
-            for ext in matches
-            if ext.pkg and ext.name and ext.domains and ext.supports_languages(live_parsed.target_languages)
-        ]
-        if not covering:
-            return False, "live_catalog_extension_missing_or_language_mismatch", None
-        unique_pkgs = {ext.pkg for ext in covering}
-        if len(unique_pkgs) != 1:
-            return False, "live_catalog_ambiguous_multiple_packages", None
-        return True, None, covering[0]
+        cat_ok, cat_reason, cat_ext, matched_srcs = live_catalog.verify_issue_fulfillment(live_parsed)
+        if not cat_ok or cat_ext is None or not matched_srcs:
+            return False, cat_reason or "live_catalog_extension_missing_or_language_mismatch", None
+        return True, None, cat_ext
 
     def _downgrade_unverified_catalog_decision(
         self,

@@ -37,6 +37,7 @@ from .models import (
 from .normalize import (
     build_corpus_idf,
     classify_dead_source_evidence,
+    compare_source_urls,
     dice_bigrams,
     jaccard_similarity,
     levenshtein_ratio,
@@ -555,15 +556,36 @@ def evaluate_comment_clarifications(
             if not ((extra_feats - {"nsfw_adult"}) <= (canonical.feature_topics - {"nsfw_adult"})):
                 return True, "feature_divergence_in_comment"
         if extra_urls and target.category in (CATEGORY_NEW_EXTENSION, CATEGORY_DOMAIN_CHANGE):
-            canon_keys = {u.identity_key for u in (canonical.url, canonical.new_url) if u and u.is_valid_domain}
-            extra_keys = {u.identity_key for u in extra_urls if u.is_valid_domain}
+            canon_keys = {
+                (u.source_identity_key or u.identity_key)
+                for u in (canonical.url, canonical.new_url)
+                if u and u.is_valid_domain
+            }
+            extra_keys = {
+                (u.source_identity_key or u.identity_key)
+                for u in extra_urls
+                if u.is_valid_domain
+            }
             if canon_keys and extra_keys and not (extra_keys <= canon_keys):
-                return True, "domain_divergence_in_comment"
+                return True, "domain_or_source_divergence_in_comment"
     elif match_kind == "already_fulfilled_creation":
         if extra_exists or (extra_feats - {"nsfw_adult"}):
             return True, "intent_divergence_in_comment"
+        if extra_urls and catalog_ext_summary:
+            src_keys = {
+                s.get("source_identity_key")
+                for s in (catalog_ext_summary.get("sources") or [])
+                if isinstance(s, dict) and s.get("source_identity_key")
+            }
+            extra_keys = {
+                (u.source_identity_key or u.identity_key)
+                for u in extra_urls
+                if u.is_valid_domain
+            }
+            if src_keys and extra_keys and not (extra_keys <= src_keys):
+                return True, "catalog_source_divergence_in_comment"
         if extra_langs and catalog_ext_summary:
-            cat_langs = set(catalog_ext_summary.get("languages") or [])
+            cat_langs = set(catalog_ext_summary.get("matched_languages") or catalog_ext_summary.get("languages") or [])
             if "all" not in cat_langs and not (extra_langs <= cat_langs):
                 return True, "unsupported_language_in_comment"
         if _EXCLUSIVITY_CUE_RE.search(norm_comments) or extra_symps or extra_sigs:
@@ -573,11 +595,19 @@ def evaluate_comment_clarifications(
 
 
 def _bug_scopes_diverge(target: ParsedIssue, cand: ParsedIssue) -> tuple[bool, str | None, bool]:
-    """Compare work, title subject, chapter, episode, endpoint, method, and DNS-host scopes between two bugs.
+    """Compare work, title subject, chapter, episode, endpoint, method, source subdomain, and DNS-host scopes.
 
     Returns (diverges, reason_code, hard_disjoint) where hard_disjoint=True warrants no_match.
     Always evaluate hard-disjoint contradictions before soft unilateral ambiguities.
     """
+    if (
+        target.url and cand.url
+        and target.url.is_valid_domain and cand.url.is_valid_domain
+        and target.url.identity_key == cand.url.identity_key
+        and target.url.exact_host != cand.url.exact_host
+    ):
+        return True, "different_source_subdomains", True
+
     wt = target.specific_work_hint.replace(" ", "")
     wc = cand.specific_work_hint.replace(" ", "")
     if wt and wc and levenshtein_ratio(wt, wc) < 0.80:
@@ -605,12 +635,23 @@ def _bug_scopes_diverge(target: ParsedIssue, cand: ParsedIssue) -> tuple[bool, s
             return True, "different_dns_hosts", True
 
     title_div, title_reason, title_hard = _title_subjects_diverge(target, cand)
-    if title_div and title_hard and not (wt and wc) and not shared_endpoints:
+    if title_div and title_hard and not (wt and wc):
         return True, title_reason, True
 
     # Soft / unilateral scope ambiguities (keep open as possible_duplicate, never auto-close)
     if bool(wt) != bool(wc):
         return True, "local_vs_global_work", False
+    if (bool(wt) or target.has_unnamed_specific_work_scope) and cand.has_global_work_scope and not cand.specific_work_hint:
+        return True, "local_vs_global_work", False
+    if (bool(wc) or cand.has_unnamed_specific_work_scope) and target.has_global_work_scope and not target.specific_work_hint:
+        return True, "local_vs_global_work", False
+    if (
+        (target.has_unnamed_specific_work_scope or cand.has_unnamed_specific_work_scope)
+        and not (wt and wc)
+        and not (target.mentioned_chapters and target.mentioned_chapters == cand.mentioned_chapters)
+        and not (target.mentioned_episodes and target.mentioned_episodes == cand.mentioned_episodes)
+    ):
+        return True, "unidentified_specific_scope", False
 
     has_shared_nx_host = (
         "nxdomain_dns" in (target.error_signatures & cand.error_signatures)
@@ -622,7 +663,7 @@ def _bug_scopes_diverge(target: ParsedIssue, cand: ParsedIssue) -> tuple[bool, s
     if bool(paths_t) != bool(paths_c) and not has_shared_nx_host:
         return True, "endpoint_scope_mismatch", False
 
-    if title_div and not (wt and wc) and not shared_endpoints:
+    if title_div and not (wt and wc):
         return True, title_reason, False
 
     if target.mentioned_chapters and cand.mentioned_chapters:
@@ -848,6 +889,58 @@ class DuplicateMatcher:
                     break
         return notes
 
+    def _is_equivalent_creation_request(self, target: ParsedIssue, cand: ParsedIssue) -> bool:
+        """Return True only when two creation tickets ask for the exact same source URL/path, name, type, and language."""
+        if target.category != CATEGORY_NEW_EXTENSION or cand.category != CATEGORY_NEW_EXTENSION:
+            return False
+        if (
+            target.semantic_intent != INTENT_CREATE_EXTENSION
+            or cand.semantic_intent != INTENT_CREATE_EXTENSION
+            or target.extension_already_exists
+            or cand.extension_already_exists
+            or target.category_mismatch
+            or cand.category_mismatch
+            or target.has_substantive_observations
+            or cand.has_substantive_observations
+            or bool(target.symptom_topics)
+            or bool(cand.symptom_topics)
+            or _types_contradict(target, cand)
+            or target.ext_type != cand.ext_type
+            or target.ext_type is None
+        ):
+            return False
+        if any(l.startswith("unknown:") for l in (target.target_languages | cand.target_languages)):
+            return False
+        if target.existing_only_languages != cand.existing_only_languages:
+            return False
+        lang_t = target.target_languages - {"all"}
+        lang_c = cand.target_languages - {"all"}
+        if ("all" in target.target_languages) != ("all" in cand.target_languages):
+            return False
+        if bool(target.target_languages) != bool(cand.target_languages):
+            return False
+        if lang_t and lang_c and not (lang_t <= lang_c):
+            return False
+        urls_equiv, _ = compare_source_urls(
+            target.url,
+            cand.url,
+            ext_type_a=target.ext_type,
+            ext_type_b=cand.ext_type,
+            allow_default_type_landing=True,
+        )
+        if not urls_equiv:
+            return False
+        t_name, c_name = target.compact_name, cand.compact_name
+        name_exact = bool(t_name and c_name and (t_name == c_name or name_without_tld(target.name) == name_without_tld(cand.name)))
+        name_ratio = levenshtein_ratio(t_name, c_name) if (t_name and c_name) else 0.0
+        stem_compat = False
+        if target.url and target.url.host_stem:
+            stem_compat = (
+                levenshtein_ratio(t_name, target.url.host_stem) >= 0.65
+                and levenshtein_ratio(c_name, target.url.host_stem) >= 0.65
+            ) or (target.url.host_stem in t_name and target.url.host_stem in c_name)
+        return name_exact or name_ratio >= self.config.thresholds.new_extension_confirmed_name_edit_ratio or stem_compat
+
     def evaluate(self, target: ParsedIssue) -> GuardDecision:
         """Evaluate target issue against older candidates and official published catalogs."""
         if not self.config.enabled:
@@ -905,49 +998,30 @@ class DuplicateMatcher:
                 if ev is not None and ev.classification != "no_match":
                     matches.append(ev)
 
-        # Check official extension catalogs for already-fulfilled creation or existing-extension nuance
+        # Check official extension catalogs using unified source-level identity & per-source language coverage
         cat_matches: tuple[CatalogExtension, ...] = ()
         if target.category == CATEGORY_NEW_EXTENSION and self.catalog:
             cat_matches = self.catalog.find_matching_extensions(target)
 
         if cat_matches:
-            is_pure_creation = (
-                target.semantic_intent == INTENT_CREATE_EXTENSION
-                and target.ext_type in ("Mangá", "Anime")
-                and bool(target.target_languages)
-                and not any(lang.startswith("unknown:") for lang in target.target_languages)
-                and not target.extension_already_exists
-                and not target.category_mismatch
-                and not target.has_substantive_observations
-                and not target.symptom_topics
-                and not (target.error_signatures - {"cloudflare"})
-            )
-            covering = [
-                ext
-                for ext in cat_matches
-                if ext.pkg and ext.name and ext.domains and ext.supports_languages(target.target_languages)
-            ]
-            covering_unique_pkgs = {ext.pkg for ext in covering}
-            if is_pure_creation and covering and len(covering_unique_pkgs) == 1:
-                cat_ext = covering[0]
-                # Prefer linking to an earlier compatible creation ticket if one exists
+            cat_ok, cat_block_reason, verified_ext, matched_srcs = self.catalog.verify_issue_fulfillment(target)
+            if cat_ok and verified_ext is not None and matched_srcs:
+                # Prefer linking to an earlier equivalent creation ticket ONLY if same source URL, name, type, and language
                 prior_canon: int | None = None
                 for cand in self.by_category.get(CATEGORY_NEW_EXTENSION, ()):
                     if cand.raw.number == target.raw.number or _issue_order_key(cand) >= target_key:
                         continue
-                    if cand.semantic_intent != INTENT_CREATE_EXTENSION:
+                    canon_candidate, cycle_or_missing = self.resolve_canonical_with_status(cand.raw.number)
+                    if cycle_or_missing:
                         continue
-                    same_dom = bool(
-                        target.url and target.url.is_valid_domain
-                        and cand.url and cand.url.is_valid_domain
-                        and target.url.identity_key == cand.url.identity_key
-                    )
-                    if same_dom and not _types_contradict(target, cand):
-                        canon_candidate = self.resolve_canonical(cand.raw.number)
-                        canon_obj = self.by_number.get(canon_candidate, cand)
-                        if _issue_order_key(canon_obj) < target_key:
-                            prior_canon = canon_candidate
-                            break
+                    canon_obj = self.by_number.get(canon_candidate, cand)
+                    if _issue_order_key(canon_obj) >= target_key:
+                        continue
+                    if canon_obj.resolution in ("declined", "cancelled"):
+                        continue
+                    if self._is_equivalent_creation_request(target, canon_obj):
+                        prior_canon = canon_candidate
+                        break
 
                 should_close = True
                 blocked: str | None = None
@@ -961,16 +1035,19 @@ class DuplicateMatcher:
                     should_close = False
                     blocked = "target_already_closed"
 
-                lang_desc = ", ".join(sorted(cat_ext.languages)) if cat_ext.languages else "N/D"
-                ver_desc = f" v{cat_ext.version}" if cat_ext.version else ""
+                matched_langs = sorted(frozenset().union(*(s.languages for s in matched_srcs)))
+                lang_desc = ", ".join(matched_langs) if matched_langs else "N/D"
+                ver_desc = f" v{verified_ext.version}" if verified_ext.version else ""
                 reason = (
-                    f"A extensão '{cat_ext.name}' ({cat_ext.pkg}{ver_desc}, idioma(s): {lang_desc}) já existe e está publicada "
-                    f"no catálogo oficial ({cat_ext.catalog_repo})."
+                    f"A fonte '{verified_ext.name}' ({verified_ext.pkg}{ver_desc}, URL '{matched_srcs[0].base_url}', idioma(s): {lang_desc}) "
+                    f"já existe e está publicada no catálogo oficial ({verified_ext.catalog_repo})."
                 )
                 if prior_canon is not None:
-                    reason += f" Pedido original registrado no ticket #{prior_canon}."
+                    reason += f" Pedido original equivalente registrado no ticket #{prior_canon}."
                 res_label = LABEL_DUPLICATE if prior_canon is not None else LABEL_DONE
                 state_reason = "duplicate" if prior_canon is not None else "completed"
+                cat_summary = verified_ext.to_summary_dict()
+                cat_summary["matched_languages"] = matched_langs
                 return GuardDecision(
                     issue_number=target.raw.number,
                     category=target.category,
@@ -985,29 +1062,54 @@ class DuplicateMatcher:
                     semantic_intent=target.semantic_intent,
                     inferred_category=target.inferred_category,
                     category_mismatch=target.category_mismatch,
-                    catalog_extension=cat_ext.to_summary_dict(),
+                    catalog_extension=cat_summary,
                     resolution_label=res_label,
                     close_state_reason=state_reason,
                 )
 
-            # Extension exists in catalog, but in a different language or the ticket asks for enhancement/fix:
-            # NEVER auto-close as fulfilled creation or apply 'Duplicado'!
+            # Catalog has a related entry on the domain, but source URL/path, per-source language, metadata, or intent does NOT cover target
             if not matches:
-                cat_ext = cat_matches[0]
-                lang_desc = ", ".join(sorted(cat_ext.languages)) if cat_ext.languages else "N/D"
-                if is_pure_creation and not covering:
+                ref_ext = verified_ext or cat_matches[0]
+                if matched_srcs:
+                    src_langs = sorted(frozenset().union(*(s.languages for s in matched_srcs)))
+                    lang_desc = ", ".join(src_langs) if src_langs else "N/D"
+                else:
+                    lang_desc = ", ".join(sorted(ref_ext.languages)) if ref_ext.languages else "N/D"
+                cat_summary = ref_ext.to_summary_dict()
+                if matched_srcs:
+                    cat_summary["matched_languages"] = sorted(frozenset().union(*(s.languages for s in matched_srcs)))
+
+                if cat_block_reason == "catalog_source_url_or_path_mismatch":
+                    inferred_cat = target.inferred_category or target.category
+                    mismatch = target.category_mismatch
+                    match_kind = "distinct_source_scope"
+                    req_url = target.url.raw if target.url else "N/D"
+                    reason = (
+                        f"A extensão '{ref_ext.name}' existe no catálogo oficial ({ref_ext.catalog_repo}) para outro subdomínio/caminho/porta, "
+                        f"não comprovando cobertura para a fonte solicitada ({req_url}); solicitação preservada aberta."
+                    )
+                elif cat_block_reason == "catalog_source_language_mismatch":
                     req_langs = ", ".join(sorted(target.target_languages)) or "solicitado"
                     inferred_cat = CATEGORY_ENHANCEMENT
                     mismatch = True
+                    match_kind = "distinct_objective"
                     reason = (
-                        f"A extensão '{cat_ext.name}' já existe no catálogo oficial ({cat_ext.catalog_repo}) apenas para idioma(s) [{lang_desc}], "
-                        f"não cobrindo [{req_langs}]; solicitação preservada aberta como expansão de idioma."
+                        f"A fonte correspondente em '{ref_ext.name}' no catálogo oficial ({ref_ext.catalog_repo}) cobre apenas idioma(s) [{lang_desc}], "
+                        f"não cobrindo [{req_langs}]; solicitação preservada aberta."
+                    )
+                elif cat_block_reason in ("catalog_incomplete_or_contradictory_metadata", "live_catalog_ambiguous_multiple_packages"):
+                    inferred_cat = target.inferred_category or target.category
+                    mismatch = target.category_mismatch
+                    match_kind = "ambiguous_catalog"
+                    reason = (
+                        f"Metadados do catálogo oficial para '{ref_ext.name}' ({ref_ext.catalog_repo}) são incompletos, contraditórios ou ambíguos ({cat_block_reason}); solicitação preservada aberta."
                     )
                 else:
                     inferred_cat = target.inferred_category or target.category
                     mismatch = target.category_mismatch
+                    match_kind = "distinct_objective"
                     reason = (
-                        f"A extensão '{cat_ext.name}' já existe no catálogo oficial ({cat_ext.catalog_repo}, idioma(s): {lang_desc}), "
+                        f"A extensão '{ref_ext.name}' já existe no catálogo oficial ({ref_ext.catalog_repo}, idioma(s): {lang_desc}), "
                         f"mas esta solicitação trata de {_describe_intent_pt(target.semantic_intent)} e foi preservada aberta."
                     )
                 return GuardDecision(
@@ -1019,11 +1121,12 @@ class DuplicateMatcher:
                     reasons=(reason,),
                     fingerprint=target.content_fingerprint,
                     should_auto_close=False,
-                    match_kind="distinct_objective",
+                    blocked_reason=cat_block_reason,
+                    match_kind=match_kind,
                     semantic_intent=target.semantic_intent,
                     inferred_category=inferred_cat,
                     category_mismatch=mismatch,
-                    catalog_extension=cat_ext.to_summary_dict(),
+                    catalog_extension=cat_summary,
                 )
 
         if not matches:
@@ -1242,14 +1345,21 @@ class DuplicateMatcher:
                 or name_ratio >= th.new_extension_confirmed_name_edit_ratio
                 or stem_compat
             )
-            if t_url.host and c_url.host and (t_url.host != c_url.host or t_url.port != c_url.port):
+            urls_equiv, url_div_reason = compare_source_urls(
+                t_url,
+                c_url,
+                ext_type_a=target.ext_type,
+                ext_type_b=cand.ext_type,
+                allow_default_type_landing=True,
+            )
+            if not urls_equiv:
                 return (
                     "possible_duplicate",
                     0.68,
                     (
-                        f"Mesmo domínio registrável ({t_url.registrable_domain}), porém subdomínio ou porta distinta ({t_url.exact_host or t_url.host} vs {c_url.exact_host or c_url.host}); requer revisão humana.",
+                        f"Mesmo domínio registrável ({t_url.registrable_domain}), porém destino específico diverge ({url_div_reason}: {t_url.raw} vs {c_url.raw}); requer revisão humana.",
                     ),
-                    ("subdomain_or_port_divergence",),
+                    (url_div_reason or "subdomain_or_port_divergence",),
                     "ambiguous_same_source",
                 )
             # Divergent substantive observations or language superset on creation tickets block automatic closure
@@ -1651,14 +1761,13 @@ class DuplicateMatcher:
         if t_new.is_valid_domain and c_new.is_valid_domain:
             if t_new.identity_key != c_new.identity_key:
                 return None
-            t_new_dest = t_new.destination_key or t_new.identity_key
-            c_new_dest = c_new.destination_key or c_new.identity_key
-            if t_new_dest != c_new_dest:
+            new_equiv, new_div = compare_source_urls(t_new, c_new)
+            if not new_equiv:
                 return (
                     "possible_duplicate",
                     0.66,
                     (
-                        f"Mesmo domínio registrável na URL nova ({t_new.registrable_domain}), porém subdomínio, porta ou caminho de destino divergem ({t_new.exact_host}{t_new.normalized_path if t_new.normalized_path != '/' else ''} vs {c_new.exact_host}{c_new.normalized_path if c_new.normalized_path != '/' else ''}); requer revisão humana.",
+                        f"Mesmo domínio registrável na URL nova ({t_new.registrable_domain}), porém subdomínio, porta ou caminho de destino divergem ({new_div}: {t_new.exact_host}{t_new.normalized_path if t_new.normalized_path != '/' else ''} vs {c_new.exact_host}{c_new.normalized_path if c_new.normalized_path != '/' else ''}); requer revisão humana.",
                     ),
                     ("destination_subdomain_or_path_mismatch",),
                     "ambiguous_same_source",
@@ -1670,24 +1779,36 @@ class DuplicateMatcher:
         if not same_new:
             return None
 
+        # Distinct languages on domain-change requests cannot be auto-closed blindly
+        lang_t = target.target_languages - {"all"}
+        lang_c = cand.target_languages - {"all"}
+        if lang_t and lang_c and not (lang_t & lang_c):
+            return (
+                "possible_duplicate",
+                0.65,
+                ("Mesma URL de destino informada, mas os idiomas solicitados diferem; requer revisão humana.",),
+                ("language_scope_divergence",),
+                "ambiguous_same_source",
+            )
+
         # Both target and candidate share the EXACT same destination
-        t_old_dest = (t_old.destination_key or t_old.identity_key) if (t_old and t_old.is_valid_domain) else ""
-        c_old_dest = (c_old.destination_key or c_old.identity_key) if (c_old and c_old.is_valid_domain) else ""
-        same_old_valid = bool(t_old_dest and c_old_dest and t_old_dest == c_old_dest)
-        old_contradicts = bool(t_old_dest and c_old_dest and t_old_dest != c_old_dest)
-        if old_contradicts:
+        both_old_valid = bool(t_old and t_old.is_valid_domain and c_old and c_old.is_valid_domain)
+        same_old_valid, old_div = (
+            compare_source_urls(t_old, c_old) if both_old_valid else (False, None)
+        )
+        if both_old_valid and not same_old_valid:
             return (
                 "possible_duplicate",
                 0.64,
-                ("Mesma URL nova informada, mas URLs antigas divergem; requer revisão humana.",),
+                (f"Mesma URL nova informada, mas URLs antigas divergem ({old_div}); requer revisão humana.",),
                 ("old_url_mismatch",),
                 "ambiguous_same_source",
             )
 
         # Degenerate domain change (old == new) cannot justify automatic closure
         if same_old_valid and t_new.is_valid_domain:
-            t_new_dest = t_new.destination_key or t_new.identity_key
-            if t_old_dest == t_new_dest:
+            old_vs_new, _ = compare_source_urls(t_old, t_new)
+            if old_vs_new:
                 return (
                     "possible_duplicate",
                     0.65,
@@ -1732,15 +1853,17 @@ class DuplicateMatcher:
         if _days_between(target.raw.created_at, cand.raw.created_at) > self.config.dead_source_window_days:
             return None
 
-        # Compare domains if both explicitly provide URLs
+        # Compare domains & exact source destinations if both explicitly provide URLs
         t_url = target.url or (target.extra_urls[0] if target.extra_urls else None)
         c_url = cand.url or (cand.extra_urls[0] if cand.extra_urls else None)
         diff_dest_same_reg = False
         if t_url and c_url and t_url.is_valid_domain and c_url.is_valid_domain:
             if t_url.identity_key != c_url.identity_key:
                 return None
-            if (t_url.destination_key or t_url.identity_key) != (c_url.destination_key or c_url.identity_key):
+            if not compare_source_urls(t_url, c_url)[0]:
                 diff_dest_same_reg = True
+        if ("vip_paywall" in target.symptom_topics) != ("vip_paywall" in cand.symptom_topics):
+            diff_dest_same_reg = True
 
         ev_t = classify_dead_source_evidence(f"{target.description} {target.additional_info}")
         ev_c = classify_dead_source_evidence(f"{cand.description} {cand.additional_info}")
@@ -1797,11 +1920,24 @@ class DuplicateMatcher:
             # One targets a specific extension while the other is global
             return None
 
-        # Semantic protection: disjoint feature topics or disjoint target languages => distinct enhancements
+        # Semantic protection: disjoint intents, feature topics, login vs registration, or disjoint target languages
+        if target.semantic_intent != cand.semantic_intent:
+            return None
         feat_t = target.feature_topics - {"nsfw_adult"}
         feat_c = cand.feature_topics - {"nsfw_adult"}
         if feat_t and feat_c and not (feat_t & feat_c):
             return None
+        norm_t_enh = normalize_text(f"{target.clean_title} {target.description}", preserve_urls=False)
+        norm_c_enh = normalize_text(f"{cand.clean_title} {cand.description}", preserve_urls=False)
+        has_login_t = bool(re.search(r"\b(?:login|logar|autentic\w*|entrar\s+na\s+conta)\b", norm_t_enh))
+        has_login_c = bool(re.search(r"\b(?:login|logar|autentic\w*|entrar\s+na\s+conta)\b", norm_c_enh))
+        has_reg_t = bool(re.search(r"\b(?:cadastr\w*|registr\w*|criar\s+(?:nova\s+)?conta)\b", norm_t_enh))
+        has_reg_c = bool(re.search(r"\b(?:cadastr\w*|registr\w*|criar\s+(?:nova\s+)?conta)\b", norm_c_enh))
+        if (has_login_t and not has_reg_t and has_reg_c and not has_login_c) or (
+            has_reg_t and not has_login_t and has_login_c and not has_reg_c
+        ):
+            return None
+        auth_scope_mismatch = (has_login_t != has_login_c) or (has_reg_t != has_reg_c)
         lang_t = target.target_languages - {"all"}
         lang_c = cand.target_languages - {"all"}
         if lang_t and lang_c and not (lang_t & lang_c):
@@ -1820,6 +1956,7 @@ class DuplicateMatcher:
         informative_shared = (target.all_text_tokens & cand.all_text_tokens) - ext_tokens - _GENERIC_BUG_STOPWORDS
         if (
             cand.is_open
+            and not auth_scope_mismatch
             and feat_t == feat_c
             and len(normalize_text(target.description, preserve_urls=False)) >= 25
             and len(normalize_text(cand.description, preserve_urls=False)) >= 25

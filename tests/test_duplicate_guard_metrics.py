@@ -445,6 +445,79 @@ def build_labeled_cases():
             _mk(8024, "[Mudança de domínio]: SubSame", "### Tipo de extensão\nMangá\n### Nome da extensão\nSubSame\n### URL antiga\nhttps://subsame.old\n### URL nova\nhttps://www.v2.subsame.com\n", ["Mudança de domínio", "Mangá"], created_at="2026-11-02T10:00:00Z"),
             True, True,
         ),
+        # --- v1.6.0 audit scenarios ---
+        (
+            "v160_ne_neg_webtoons_vs_novels", "new_extension",
+            _mk(9001, "[Nova extensão]: Sushi Manga", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Idioma\nPortuguês\n### URL do site\nhttps://sushimanga.com/webtoons\n", ["Nova extensão", "Mangá"]),
+            _mk(9002, "[Nova extensão]: Sushi Manga", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Idioma\nPortuguês\n### URL do site\nhttps://sushimanga.com/novels\n", ["Nova extensão", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            False, True,
+        ),
+        (
+            "v160_ne_neg_pt_vs_en_path", "new_extension",
+            _mk(9003, "[Nova extensão]: Sushi Manga", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Idioma\nPortuguês\n### URL do site\nhttps://sushimanga.com/pt\n", ["Nova extensão", "Mangá"]),
+            _mk(9004, "[Nova extensão]: Sushi Manga", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Idioma\nInglês\n### URL do site\nhttps://sushimanga.com/en\n", ["Nova extensão", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            False, False,
+        ),
+        (
+            "v160_ne_neg_www2_vs_www", "new_extension",
+            _mk(9005, "[Nova extensão]: Sushi Manga", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Idioma\nPortuguês\n### URL do site\nhttps://www.sushimanga.com\n", ["Nova extensão", "Mangá"]),
+            _mk(9006, "[Nova extensão]: Sushi Manga", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Idioma\nPortuguês\n### URL do site\nhttps://www2.sushimanga.com\n", ["Nova extensão", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            False, True,
+        ),
+        (
+            "v160_ne_neg_mobile_m_vs_root", "new_extension",
+            _mk(9007, "[Nova extensão]: Sushi Manga", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Idioma\nPortuguês\n### URL do site\nhttps://sushimanga.com\n", ["Nova extensão", "Mangá"]),
+            _mk(9008, "[Nova extensão]: Sushi Manga", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Idioma\nPortuguês\n### URL do site\nhttps://m.sushimanga.com\n", ["Nova extensão", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            False, True,
+        ),
+        (
+            "v160_ne_neg_port_8443_vs_default", "new_extension",
+            _mk(9009, "[Nova extensão]: Sushi Manga", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Idioma\nPortuguês\n### URL do site\nhttps://sushimanga.com:8443\n", ["Nova extensão", "Mangá"]),
+            _mk(9010, "[Nova extensão]: Sushi Manga", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Idioma\nPortuguês\n### URL do site\nhttps://sushimanga.com\n", ["Nova extensão", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            False, True,
+        ),
+        (
+            "v160_ne_neg_func_query_diff", "new_extension",
+            _mk(9011, "[Nova extensão]: Sushi Manga", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Idioma\nPortuguês\n### URL do site\nhttps://sushimanga.com/?type=webtoon\n", ["Nova extensão", "Mangá"]),
+            _mk(9012, "[Nova extensão]: Sushi Manga", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Idioma\nPortuguês\n### URL do site\nhttps://sushimanga.com/?type=novel\n", ["Nova extensão", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            False, True,
+        ),
+        (
+            "v160_ne_pos_root_vs_home_https", "new_extension",
+            _mk(9013, "[Nova extensão]: Sushi Manga", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Idioma\nPortuguês\n### URL do site\nhttp://sushimanga.com/\n", ["Nova extensão", "Mangá"]),
+            _mk(9014, "[Nova extensão]: Sushi Manga", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Idioma\nPortuguês\n### URL do site\nhttps://www.sushimanga.com/home\n", ["Nova extensão", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            True, True,
+        ),
+        (
+            "v160_bug_neg_na_serie_naruto_vs_bleach", "bug",
+            _mk(9015, "[Problema na extensão]: Sushi Manga — Erro em capítulos", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Versão da extensão\n1.4.2\n### Parte afetada\nCapítulos\n### O que está acontecendo?\nNa série Naruto, ocorre JsonDecodingException em /api/chapters.\n", ["Problema na extensão", "Mangá"]),
+            _mk(9016, "[Problema na extensão]: Sushi Manga — Erro em capítulos", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Versão da extensão\n1.4.2\n### Parte afetada\nCapítulos\n### O que está acontecendo?\nNa série Bleach, ocorre JsonDecodingException em /api/chapters.\n", ["Problema na extensão", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            False, False,
+        ),
+        (
+            "v160_bug_neg_exclusivo_vs_exclusivo", "bug",
+            _mk(9017, "[Problema na extensão]: Sushi Manga — Falha", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Versão da extensão\n1.4.2\n### Parte afetada\nLeitor / Imagens\n### O que está acontecendo?\nProblema exclusivo de Naruto: No pages found no leitor.\n", ["Problema na extensão", "Mangá"]),
+            _mk(9018, "[Problema na extensão]: Sushi Manga — Falha", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Versão da extensão\n1.4.2\n### Parte afetada\nLeitor / Imagens\n### O que está acontecendo?\nOcorre somente em Bleach: No pages found no leitor.\n", ["Problema na extensão", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            False, False,
+        ),
+        (
+            "v160_bug_neg_todas_obras_vs_naruto", "bug",
+            _mk(9019, "[Problema na extensão]: Sushi Manga — Erro", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Versão da extensão\n1.4.2\n### Parte afetada\nCapítulos\n### O que está acontecendo?\nTodas as obras apresentam JsonDecodingException em /api/chapters.\n", ["Problema na extensão", "Mangá"]),
+            _mk(9020, "[Problema na extensão]: Sushi Manga — Erro", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Versão da extensão\n1.4.2\n### Parte afetada\nCapítulos\n### O que está acontecendo?\nNa série Naruto apresenta JsonDecodingException em /api/chapters.\n", ["Problema na extensão", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            False, True,
+        ),
+        (
+            "v160_bug_pos_na_serie_same_endpoint_chapter", "bug",
+            _mk(9021, "[Problema na extensão]: Sushi Manga — Naruto cap 12", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Versão da extensão\n1.4.2\n### Parte afetada\nCapítulos\n### O que está acontecendo?\nNa série Naruto, capítulo 12 falha com JsonDecodingException ao chamar https://api.sushimanga.com.br/api/chapters/12.\n", ["Problema na extensão", "Mangá"]),
+            _mk(9022, "[Problema na extensão]: Sushi Manga — Cap 12 de Naruto", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Versão da extensão\n1.4.2\n### Parte afetada\nCapítulos\n### O que está acontecendo?\nNo título Naruto, capítulo 12 retorna JsonDecodingException em GET /api/chapters/12.\n", ["Problema na extensão", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            True, True,
+        ),
+        (
+            "v160_enh_neg_login_vs_cadastro", "enhancement",
+            _mk(9023, "[Sugestão]: Sushi Manga — Login", "### Título ou resumo\nSuporte a login na Sushi Manga\n### Descrição da melhoria\nPermitir fazer login com conta existente.\n### Extensão relacionada (opcional)\nSushi Manga\n", ["Sugestão"]),
+            _mk(9024, "[Sugestão]: Sushi Manga — Cadastro", "### Título ou resumo\nSuporte a cadastro na Sushi Manga\n### Descrição da melhoria\nPermitir cadastrar nova conta diretamente no app.\n### Extensão relacionada (opcional)\nSushi Manga\n", ["Sugestão"], created_at="2026-11-02T10:00:00Z"),
+            False, False,
+        ),
     ]
     return cases
 
