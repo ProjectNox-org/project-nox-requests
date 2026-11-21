@@ -213,3 +213,50 @@ Resultados observados após a correção:
     - `reconcile` real #1 pós-reativação ([Run 44892517380](https://github.com/ProjectNox-org/project-nox-requests/actions/runs/44892517380)): `success` — `"effective_mode": "reconcile"`, `"dry_run": false`, `"auto_close_enabled": true`, `"rule_version": "1.7.1"`, `"evaluated_count": 15`, `"skipped_cached_count": 0` (reavaliação pela mudança de `auto_close_enabled`), `"would_or_did_close": 0`, `"error_count": 0`.
     - `reconcile` real #2 com cache hit ([Run 44892563298](https://github.com/ProjectNox-org/project-nox-requests/actions/runs/44892563298)): `success` — `"effective_mode": "reconcile"`, `"dry_run": false`, `"auto_close_enabled": true`, `"rule_version": "1.7.1"`, `"evaluated_count": 15`, `"skipped_cached_count": 15`, `"would_or_did_close": 0`, `"error_count": 0`.
   - **Integridade final:** `0` alertas abertos no CodeQL e todas as **15 Issues reais abertas** (`#123`, `#125`, `#128`, `#132`, `#134`, `#138`, `#139`, `#140`, `#144`, `#145`, `#146`, `#148`, `#150`, `#151`, `#156`) preservadas abertas com suas labels originais.
+  - **Sync final `v1.7.1` ([PR #169](https://github.com/ProjectNox-org/project-nox-requests/pull/169), commit `dd2ef78c723bf52e880babe785d0db85caa1335b`):** CI ([Run 44892673202](https://github.com/ProjectNox-org/project-nox-requests/actions/runs/44892673202)) e CodeQL ([Run 44892672847](https://github.com/ProjectNox-org/project-nox-requests/actions/runs/44892672847)) — `success`.
+
+---
+
+## 7. Correção Pontual de Dupla Negação e Múltiplas Exigências (`v1.7.1` → `v1.7.2`)
+
+### 7.1. Problema Identificado e Reprodução Real Antes (`v1.7.1`, commit `dd2ef78c723bf52e880babe785d0db85caa1335b`)
+
+- **Causa-raiz:** Em [`scripts/duplicate_guard/matcher.py`](../scripts/duplicate_guard/matcher.py), `_extract_observation_requirement_tokens()` verificava `prev_neg` nos ramos de `permitir`, `exibir`, `obrigatorio`, `opcional` e `crescente`/`decrescente`, mas **não verificava `prev_neg` nos ramos de `bloquear`, `ocultar` e `excluir`**, nem impedia que `_OBS_NEGATORS` emitisse `polarity:neg` + `neg:<alvo>` antes de um operador negativo imediato (`não bloquear` gerava exatamente os mesmos marcadores de `bloquear`). Além disso, múltiplas exigências ligadas por `e`/`ou` compartilhavam o mesmo escopo de cláusula.
+- **Reprodução real na `v1.7.1` (simulação offline com o matcher completo):**
+  - **Caso A (`"Preciso bloquear login na extensão."` vs `"Preciso não bloquear login na extensão."`):** ambos geravam `frozenset({'login', 'polarity:neg', 'acesso:bloquear', 'neg:login'})` (`equiv=True`) → **`confirmed_duplicate`, `auto_close=True`**.
+  - **Caso B (`"Quero ocultar conteúdo adulto."` vs `"Quero não ocultar conteúdo adulto."`):** ambos geravam `frozenset({'conteudo', 'polarity:neg', 'neg:conteudo', 'neg:adulto', 'adulto', 'visibilidade:ocultar'})` (`equiv=True`) → **`confirmed_duplicate`, `auto_close=True`**.
+  - **Caso C (`"Preciso excluir obras em inglês."` vs `"Preciso não excluir obras em inglês."`):** ambos geravam `frozenset({'inclusao:excluir', 'neg:ingles', 'polarity:neg', 'ingles'})` (`equiv=True`) → **`confirmed_duplicate`, `auto_close=True`**.
+  - **Caso G — múltiplas exigências (`"Quero filtro por autor e não ocultar capítulos extras."` vs `"Quero filtro por autor e ocultar capítulos extras."`):** ambos geravam os mesmos tokens com `visibilidade:ocultar` + `polarity:neg` (`equiv=True`) → **`confirmed_duplicate`, `auto_close=True`**.
+  - Casos `permitir` vs `não permitir`, `exibir` vs `não exibir` e `incluir` vs `não incluir` já resultavam em `possible_duplicate` (`auto_close=False`).
+
+### 7.2. Correção Implementada (`v1.7.2`)
+
+- [`scripts/duplicate_guard/models.py`](../scripts/duplicate_guard/models.py): atualização de `RULE_ENGINE_VERSION = "1.7.2"` para invalidar caches gerados sob `1.7.1`.
+- [`scripts/duplicate_guard/matcher.py`](../scripts/duplicate_guard/matcher.py):
+  - Segmentação de sub-cláusulas em conjunções coordenativas (`e`/`ou`) quando seguidas de operador ou ação, impedindo que a negação aplicada a uma exigência se propague ou se perca diante de outra exigência na mesma frase.
+  - Tratamento simétrico de `prev_neg` (com contagem de paridade `neg_count % 2 == 1`) em todos os operadores invertíveis (`_OBS_INVERTIBLE_OPERATORS`): `não bloquear` → `acesso:permitir` (`allow:<obj>`), `não ocultar` → `visibilidade:exibir` (`show:<obj>`), `não excluir` → `inclusao:incluir` (`incl:<obj>`), `não permitir` → `acesso:bloquear`, `não exibir` → `visibilidade:ocultar`, `não incluir` → `inclusao:excluir`, `não dispensar` → `modalidade:obrigatorio`, sem emitir `polarity:neg` indevido antes de operador invertível.
+- [`scripts/duplicate_guard/normalize.py`](../scripts/duplicate_guard/normalize.py): ampliação da detecção de requisitos em `has_substantive_observations_text()` para contemplar verbos/formas como `excluir`, `remover`, `omitir`, `nunca`, `jamais` e negações associadas.
+
+### 7.3. Reprodução Real Depois (`v1.7.2`, Simulação Offline)
+
+Resultados observados com o matcher completo após a correção:
+- **Caso A (`bloquear` vs `não bloquear login`):** `toks = ({'polarity:neg', 'login', 'neg:login', 'acesso:bloquear'}, {'allow:login', 'login', 'acesso:permitir'})`, `equiv=False` → **`possible_duplicate`**, **`auto_close=False`**.
+- **Caso B (`ocultar` vs `não ocultar conteúdo adulto`):** `toks = ({'conteudo', 'polarity:neg', 'visibilidade:ocultar', 'neg:conteudo', 'adulto', 'neg:adulto'}, {'show:adulto', 'visibilidade:exibir', 'show:conteudo', 'conteudo', 'adulto'})`, `equiv=False` → **`possible_duplicate`**, **`auto_close=False`**.
+- **Caso C (`excluir` vs `não excluir obras em inglês`):** `toks = ({'polarity:neg', 'inclusao:excluir', 'ingles', 'neg:ingles'}, {'ingles', 'inclusao:incluir', 'incl:ingles'})`, `equiv=False` → **`possible_duplicate`**, **`auto_close=False`**.
+- **Caso D (`permitir` vs `não permitir login`):** `equiv=False` → **`possible_duplicate`**, **`auto_close=False`**.
+- **Caso E (`exibir` vs `não exibir conteúdo adulto`):** `equiv=False` → **`possible_duplicate`**, **`auto_close=False`**.
+- **Caso F (`incluir` vs `não incluir filtro por autor`):** `equiv=False` → **`possible_duplicate`**, **`auto_close=False`**.
+- **Caso G (múltiplas exigências com negação em apenas uma delas):** `equiv=False` → **`possible_duplicate`**, **`auto_close=False`**.
+- **Formulações equivalentes (`"não permitir login"` ≡ `"bloquear login"`; `"não ocultar conteúdo adulto"` ≡ `"exibir conteúdo adulto"`) e duplicatas puras sem observações:** preservam `confirmed_duplicate` e `should_auto_close=True`.
+
+### 7.4. Testes, Benchmark e Produção (`v1.7.2`)
+
+- **Suíte local completa (simulada offline):**
+  - `python3 -m compileall -q scripts tests`: exit code `0`.
+  - `pytest -q`: **`393 passed in 2.01s`** (383 anteriores preservados + 10 novos testes `test_v172_dn_01`..`10` em [`tests/test_v170_corrective_regressions.py`](../tests/test_v170_corrective_regressions.py)).
+  - `python3 -m unittest discover -s tests -v`: **`Ran 13 tests in 0.009s — OK`**.
+  - **Benchmark (`compute_metrics()` em [`tests/test_duplicate_guard_metrics.py`](../tests/test_duplicate_guard_metrics.py) — 103 casos):**
+    - `auto_close`: `tp=20`, **`fp=0`**, `fn=0`, `tn=83`, **`precision=1.0`**, **`recall=1.0`**.
+    - `alert_or_close`: `tp=54`, **`fp=0`**, `fn=0`, `tn=49`, **`precision=1.0`**, **`recall=1.0`**.
+    - `failures`: `[]`.
+- **Publicação e validação em produção (`v1.7.2`):** atualizadas na sequência após PR, merge, CodeQL, `backfill`/`reconcile` protegidos e `reconcile` real com cache hit.

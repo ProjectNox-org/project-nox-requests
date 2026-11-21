@@ -292,6 +292,15 @@ _OBS_ACCESS_MODIFIERS = frozenset({"permitir", "bloquear"})
 _OBS_VISIBILITY_MODIFIERS = frozenset({"exibir", "ocultar"})
 _OBS_RESTRICTION_MODIFIERS = frozenset({"apenas"})
 _OBS_INCLUSION_MODIFIERS = frozenset({"com", "incluir", "excluir"})
+_OBS_INVERTIBLE_OPERATORS = frozenset({
+    "obrigatorio", "opcional", "dispensar",
+    "crescente", "decrescente",
+    "permitir", "bloquear",
+    "exibir", "ocultar",
+    "excluir", "incluir", "com",
+    "apenas",
+})
+_OBS_CLAUSE_ACTION_VERBS = frozenset({"ordenar", "agrupar", "separar", "filtrar"})
 _OBS_OPERATOR_TOKENS = (
     _OBS_NEGATORS
     | _OBS_MODAL_MODIFIERS
@@ -316,7 +325,7 @@ def _canonicalize_obs_token(tok: str) -> str:
 
 
 def _extract_observation_requirement_tokens(issue: ParsedIssue) -> frozenset[str]:
-    """Extract requirement base concepts plus contextual polarity/negation/restriction/modality markers."""
+    """Extract requirement base concepts plus contextual polarity/double-negation/restriction/modality markers."""
     raw_obs = (issue.notes or issue.additional_info or "").strip()
     if not raw_obs:
         return frozenset()
@@ -326,7 +335,20 @@ def _extract_observation_requirement_tokens(issue: ParsedIssue) -> frozenset[str
 
     ext_tokens = set(issue.distinctive_tokens)
     tokens: set[str] = set()
-    clauses = re.split(r"[.;,!?\n]+|\b(?:mas|porem|contudo|entretanto)\b", norm)
+    clauses = re.split(
+        r"[.;,!?\n]+|"
+        r"\b(?:mas|porem|contudo|entretanto|enquanto)\b|"
+        r"\b(?:e|ou)\s+(?=(?:nao|sem|nunca|jamais|nem|com|apenas|somente|exclusivamente|unicamente|"
+        r"bloquear|bloqueia|bloqueado|bloqueada|proibir|proibido|impedir|desativar|desabilitar|"
+        r"permitir|permite|permitido|liberar|habilitar|ativar|"
+        r"ocultar|oculta|oculto|esconder|escondido|omitir|"
+        r"exibir|exibe|mostrar|mostra|mostre|"
+        r"excluir|exclui|excluido|remover|removido|"
+        r"incluir|inclui|adicionar|adicione|adicionem|"
+        r"exigir|exige|dispensar|dispensa|obrigatori\w+|opcional|facultativ\w+|"
+        r"ordenar|ordenad\w+|agrupar|agrupad\w+|filtrar|filtro\w*|separar|separad\w+)\b)",
+        norm,
+    )
 
     for clause in clauses:
         raw_words = re.findall(r"[a-z0-9]{2,}", clause)
@@ -344,27 +366,48 @@ def _extract_observation_requirement_tokens(issue: ParsedIssue) -> frozenset[str
             canons.append(canon)
 
         n = len(canons)
+
+        def _bind_targets(start_idx: int, prefix: str, max_targets: int = 3) -> None:
+            bound = 0
+            for j in range(start_idx, n):
+                nxt = canons[j]
+                if nxt in _OBS_OPERATOR_TOKENS:
+                    if bound > 0 or nxt in _OBS_NEGATORS:
+                        break
+                    continue
+                if nxt in _OBS_CLAUSE_ACTION_VERBS and bound > 0:
+                    break
+                tokens.add(f"{prefix}:{nxt}")
+                bound += 1
+                if bound >= max_targets:
+                    break
+
         for idx, tok in enumerate(canons):
-            prev_neg = any(canons[j] in _OBS_NEGATORS for j in range(max(0, idx - 2), idx))
+            neg_count = sum(1 for j in range(max(0, idx - 2), idx) if canons[j] in _OBS_NEGATORS)
+            prev_neg = (neg_count % 2) == 1
 
             if tok in _OBS_NEGATORS:
-                tokens.add("polarity:neg")
-                bound = 0
-                for j in range(idx + 1, min(n, idx + 5)):
-                    nxt = canons[j]
-                    if nxt in _OBS_NEGATORS:
-                        break
-                    if nxt not in _OBS_OPERATOR_TOKENS:
-                        tokens.add(f"neg:{nxt}")
-                        bound += 1
-                        if bound >= 3:
-                            break
+                has_immediate_invertible = any(
+                    canons[j] in _OBS_INVERTIBLE_OPERATORS
+                    for j in range(idx + 1, min(n, idx + 3))
+                    if canons[j] not in _OBS_NEGATORS
+                )
+                if has_immediate_invertible:
+                    # Let the invertible operator at idx+1..idx+2 resolve net polarity/double-negation cleanly
+                    continue
+                if prev_neg:
+                    # Direct double negation on a non-operator verb/noun (e.g. "não deixar sem filtro"): never keep single neg
+                    _bind_targets(idx + 1, "incl", max_targets=3)
+                else:
+                    tokens.add("polarity:neg")
+                    _bind_targets(idx + 1, "neg", max_targets=3)
                 continue
 
             if tok == "obrigatorio":
                 if prev_neg:
                     tokens.add("modalidade:opcional")
                     tokens.add("polarity:neg")
+                    _bind_targets(idx + 1, "neg", max_targets=2)
                 else:
                     tokens.add("modalidade:obrigatorio")
                 continue
@@ -377,13 +420,13 @@ def _extract_observation_requirement_tokens(issue: ParsedIssue) -> frozenset[str
                 continue
 
             if tok == "dispensar":
-                tokens.add("polarity:neg")
-                tokens.add("modalidade:opcional")
-                for j in range(idx + 1, min(n, idx + 4)):
-                    nxt = canons[j]
-                    if nxt not in _OBS_OPERATOR_TOKENS:
-                        tokens.add(f"neg:{nxt}")
-                        break
+                if prev_neg:
+                    tokens.add("modalidade:obrigatorio")
+                    _bind_targets(idx + 1, "req", max_targets=2)
+                else:
+                    tokens.add("polarity:neg")
+                    tokens.add("modalidade:opcional")
+                    _bind_targets(idx + 1, "neg", max_targets=2)
                 continue
 
             if tok in _OBS_DIRECTION_MODIFIERS:
@@ -397,55 +440,66 @@ def _extract_observation_requirement_tokens(issue: ParsedIssue) -> frozenset[str
                 if prev_neg:
                     tokens.add("acesso:bloquear")
                     tokens.add("polarity:neg")
+                    _bind_targets(idx + 1, "neg", max_targets=3)
                 else:
                     tokens.add("acesso:permitir")
+                    _bind_targets(idx + 1, "allow", max_targets=3)
                 continue
 
             if tok == "bloquear":
-                tokens.add("acesso:bloquear")
-                tokens.add("polarity:neg")
-                for j in range(idx + 1, min(n, idx + 4)):
-                    nxt = canons[j]
-                    if nxt not in _OBS_OPERATOR_TOKENS:
-                        tokens.add(f"neg:{nxt}")
+                if prev_neg:
+                    tokens.add("acesso:permitir")
+                    _bind_targets(idx + 1, "allow", max_targets=3)
+                else:
+                    tokens.add("acesso:bloquear")
+                    tokens.add("polarity:neg")
+                    _bind_targets(idx + 1, "neg", max_targets=3)
                 continue
 
             if tok == "exibir":
                 if prev_neg:
                     tokens.add("visibilidade:ocultar")
                     tokens.add("polarity:neg")
+                    _bind_targets(idx + 1, "neg", max_targets=3)
                 else:
                     tokens.add("visibilidade:exibir")
+                    _bind_targets(idx + 1, "show", max_targets=3)
                 continue
 
             if tok == "ocultar":
-                tokens.add("visibilidade:ocultar")
-                tokens.add("polarity:neg")
-                for j in range(idx + 1, min(n, idx + 4)):
-                    nxt = canons[j]
-                    if nxt not in _OBS_OPERATOR_TOKENS:
-                        tokens.add(f"neg:{nxt}")
+                if prev_neg:
+                    tokens.add("visibilidade:exibir")
+                    _bind_targets(idx + 1, "show", max_targets=3)
+                else:
+                    tokens.add("visibilidade:ocultar")
+                    tokens.add("polarity:neg")
+                    _bind_targets(idx + 1, "neg", max_targets=3)
                 continue
 
             if tok == "excluir":
-                tokens.add("inclusao:excluir")
-                tokens.add("polarity:neg")
-                for j in range(idx + 1, min(n, idx + 4)):
-                    nxt = canons[j]
-                    if nxt not in _OBS_OPERATOR_TOKENS:
-                        tokens.add(f"neg:{nxt}")
+                if prev_neg:
+                    tokens.add("inclusao:incluir")
+                    _bind_targets(idx + 1, "incl", max_targets=3)
+                else:
+                    tokens.add("inclusao:excluir")
+                    tokens.add("polarity:neg")
+                    _bind_targets(idx + 1, "neg", max_targets=3)
                 continue
 
             if tok in ("com", "incluir"):
-                # Neutral/affirmative inclusion when unnegated; negative handling already above when prev_neg
+                if prev_neg:
+                    tokens.add("inclusao:excluir")
+                    tokens.add("polarity:neg")
+                    _bind_targets(idx + 1, "neg", max_targets=3)
                 continue
 
             if tok == "apenas":
-                tokens.add("restricao:apenas")
-                for j in range(idx + 1, min(n, idx + 3)):
-                    nxt = canons[j]
-                    if nxt not in _OBS_OPERATOR_TOKENS:
-                        tokens.add(f"only:{nxt}")
+                if prev_neg:
+                    tokens.add("restricao:nao_apenas")
+                    _bind_targets(idx + 1, "not_only", max_targets=2)
+                else:
+                    tokens.add("restricao:apenas")
+                    _bind_targets(idx + 1, "only", max_targets=2)
                 continue
 
             tokens.add(tok)

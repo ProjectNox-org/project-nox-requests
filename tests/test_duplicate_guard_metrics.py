@@ -598,6 +598,37 @@ def build_labeled_cases():
             _mk(9050, "[Nova extensão]: Sushi Manga", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Idioma\nPortuguês\n### URL do site\nhttps://sushimanga.com\n### Observações\nPreciso da extensão sem filtrar pelo nome do autor.\n", ["Nova extensão", "Mangá"], created_at="2026-11-02T10:00:00Z"),
             True, True,
         ),
+        # --- v1.7.2 double-negation & multi-clause scenarios ---
+        (
+            "v172_ne_neg_bloquear_vs_nao_bloquear_login", "new_extension",
+            _mk(9051, "[Nova extensão]: Sushi Manga", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Idioma\nPortuguês\n### URL do site\nhttps://sushimanga.com\n### Observações\nPreciso bloquear login na extensão.\n", ["Nova extensão", "Mangá"]),
+            _mk(9052, "[Nova extensão]: Sushi Manga", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Idioma\nPortuguês\n### URL do site\nhttps://sushimanga.com\n### Observações\nPreciso não bloquear login na extensão.\n", ["Nova extensão", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            False, True,
+        ),
+        (
+            "v172_ne_neg_ocultar_vs_nao_ocultar_adulto", "new_extension",
+            _mk(9053, "[Nova extensão]: Sushi Manga", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Idioma\nPortuguês\n### URL do site\nhttps://sushimanga.com\n### Observações\nQuero ocultar conteúdo adulto.\n", ["Nova extensão", "Mangá"]),
+            _mk(9054, "[Nova extensão]: Sushi Manga", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Idioma\nPortuguês\n### URL do site\nhttps://sushimanga.com\n### Observações\nQuero não ocultar conteúdo adulto.\n", ["Nova extensão", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            False, True,
+        ),
+        (
+            "v172_ne_neg_excluir_vs_nao_excluir_ingles", "new_extension",
+            _mk(9055, "[Nova extensão]: Sushi Manga", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Idioma\nPortuguês\n### URL do site\nhttps://sushimanga.com\n### Observações\nPreciso excluir obras em inglês.\n", ["Nova extensão", "Mangá"]),
+            _mk(9056, "[Nova extensão]: Sushi Manga", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Idioma\nPortuguês\n### URL do site\nhttps://sushimanga.com\n### Observações\nPreciso não excluir obras em inglês.\n", ["Nova extensão", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            False, True,
+        ),
+        (
+            "v172_ne_neg_multi_req_partial_negation", "new_extension",
+            _mk(9057, "[Nova extensão]: Sushi Manga", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Idioma\nPortuguês\n### URL do site\nhttps://sushimanga.com\n### Observações\nQuero filtro por autor e não ocultar capítulos extras.\n", ["Nova extensão", "Mangá"]),
+            _mk(9058, "[Nova extensão]: Sushi Manga", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Idioma\nPortuguês\n### URL do site\nhttps://sushimanga.com\n### Observações\nQuero filtro por autor e ocultar capítulos extras.\n", ["Nova extensão", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            False, True,
+        ),
+        (
+            "v172_ne_pos_equiv_nao_ocultar_vs_exibir", "new_extension",
+            _mk(9059, "[Nova extensão]: Sushi Manga", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Idioma\nPortuguês\n### URL do site\nhttps://sushimanga.com\n### Observações\nQuero não ocultar conteúdo adulto.\n", ["Nova extensão", "Mangá"]),
+            _mk(9060, "[Nova extensão]: Sushi Manga", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Idioma\nPortuguês\n### URL do site\nhttps://sushimanga.com\n### Observações\nPreciso exibir conteúdo adulto.\n", ["Nova extensão", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            True, True,
+        ),
     ]
     return cases
 
