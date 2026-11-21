@@ -45,6 +45,16 @@ O painel utiliza atualização periódica no repositório combinada a consultas 
 
 Uma solicitação **fechada** não significa necessariamente que foi implementada: conforme a resolução aplicada pelos mantenedores, ela também pode estar marcada como **Concluído**, **Recusado**, **Duplicado** ou **Cancelado**.
 
+## Nox Duplicate Guard
+
+Este repositório utiliza o **Nox Duplicate Guard** para reduzir tickets repetidos e agilizar a triagem:
+
+- **Prevenção prévia no Tracker:** ao clicar em **Abrir Solicitação** no Tracker, é possível pesquisar demandas parecidas e votar com `👍` antes de abrir uma nova Issue.
+- **Triagem e limpeza automática:** após a abertura ou edição de uma Issue (e em reconciliações incrementais e varreduras históricas `backfill`), o workflow [`duplicate-guard.yml`](.github/workflows/duplicate-guard.yml) compara os campos estruturados do formulário (tipo, fonte/extensão, domínio normalizado, parte afetada, erro e contexto temporal).
+- **Tratamento seguro:** duplicatas ambíguas ficam abertas com comentário informativo para revisão humana; duplicatas comprovadas contra tickets abertos compatíveis recebem justificativa com link para a Issue original e resolução oficial `Duplicado` (com proteção contra falsificação de comentários, falhas parciais e reaberturas manuais).
+
+Consulte a documentação técnica completa em [**docs/DUPLICATE_GUARD.md**](docs/DUPLICATE_GUARD.md).
+
 ## Informações importantes
 
 - **Privacidade:** nunca publique senhas, cookies de sessão, tokens de acesso ou dados pessoais sensíveis nos formulários ou comentários. Tudo o que é enviado nas solicitações fica visível publicamente.

@@ -1,0 +1,29 @@
+name: Executar Testes das Automações
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar PyYAML e pytest
+        run: python3 -m pip install --quiet pytest pyyaml
+
+      - name: Validar sintaxe e executar suíte de testes
+        run: |
+          python3 -m compileall -q scripts tests
+          python3 -m pytest -v tests/
