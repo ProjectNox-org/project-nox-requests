@@ -4,6 +4,7 @@
   "auto_close_enabled": true,
   "dry_run": false,
   "reconcile_lookback_days": 30,
+  "batch_size": 50,
   "max_candidates_in_comment": 3,
   "dead_source_window_days": 30,
   "bug_regression_days": 3,

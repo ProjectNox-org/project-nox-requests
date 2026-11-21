@@ -10,6 +10,24 @@ from typing import Literal
 
 Classification = Literal["no_match", "possible_duplicate", "confirmed_duplicate"]
 
+RULE_ENGINE_VERSION = "1.1.0"
+
+TRUSTED_BOT_LOGINS = frozenset({
+    "github-actions[bot]",
+    "github-actions",
+})
+
+TRUSTED_AUTHOR_ASSOCIATIONS = frozenset({
+    "OWNER",
+    "MEMBER",
+    "COLLABORATOR",
+})
+
+MAINTAINER_OVERRIDE_LABELS = frozenset({
+    "ignorar-duplicata",
+    "duplicate-guard:ignore",
+})
+
 CATEGORY_NEW_EXTENSION = "new_extension"
 CATEGORY_BUG = "bug"
 CATEGORY_DOMAIN_CHANGE = "domain_change"
@@ -65,12 +83,8 @@ HUMAN_INTERVENTION_LABELS = frozenset({
 INCOMPATIBLE_STATUS_LABELS_ON_DUPLICATE = (
     "Em análise",
     "Aguardando informações",
-    "Em desenvolvimento",
-    "Aceito",
     "status:triage",
     "status:needs-info",
-    "status:in-progress",
-    "status:accepted",
 )
 
 LABEL_DUPLICATE = "Duplicado"
@@ -245,6 +259,7 @@ class GuardConfig:
     auto_close_enabled: bool = True
     dry_run: bool = False
     reconcile_lookback_days: int = 30
+    batch_size: int = 50
     max_candidates_in_comment: int = 3
     dead_source_window_days: int = 30
     bug_regression_days: int = 3

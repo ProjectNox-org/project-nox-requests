@@ -5,131 +5,97 @@
 
 [← Voltar ao README principal](../README.md)
 
-O **Nox Duplicate Guard** é o sistema híbrido do Project Nox para prevenir a abertura de tickets repetidos e identificar/tratar automaticamente solicitações duplicadas na **Central de Pedidos** (`ProjectNox-org/project-nox-requests`), sem depender de servidores permanentes ou APIs externas pagas.
+O **Nox Duplicate Guard** é o sistema híbrido do Project Nox para prevenir a abertura de tickets repetidos e gerenciar automaticamente solicitações duplicadas (novas, editadas ou históricas) na **Central de Pedidos** (`ProjectNox-org/project-nox-requests`), sem servidor permanente nem APIs pagas.
 
 ---
 
-## 1. Arquitetura Híbrida (4 Camadas)
+## 1. Arquitetura Escolhida (3 Níveis no Backend + Prevenção no Tracker)
 
-| Camada | Onde executa | Finalidade |
-| :--- | :--- | :--- |
-| **Camada A — Prevenção** | Tracker (`project-nox-tracker`) | Pesquisa rápida no modal **Abrir Solicitação** (`duplicate-guard.js`) antes de redirecionar o usuário ao formulário do GitHub, facilitando votar 👍 em pedidos existentes. |
-| **Camada B — Detector** | GitHub Actions (`duplicate-guard.yml`) | Motor determinístico em Python (`scripts/duplicate_guard/`) executado em eventos de Issue (`opened`, `edited`, `reopened`). |
-| **Camada C — Classificação e Resolução** | `scripts/duplicate_guard/matcher.py` + `actions.py` | Classifica em `no_match`, `possible_duplicate` (apenas comenta para revisão humana) ou `confirmed_duplicate` (elegível para encerramento formal seguro com `Duplicado`). |
-| **Camada D — Reconciliação** | GitHub Actions (`schedule` a cada 6h + `workflow_dispatch`) | Varre Issues abertas recentes para recuperar falhas transitórias da API, concorrência ou eventos perdidos. |
+| Camada | Gatilho / Onde executa | Frequência / Latência | Finalidade |
+| :--- | :--- | :--- | :--- |
+| **Camada A — Prevenção** | Tracker (`project-nox-tracker`) | Tempo real no navegador | Pesquisa rápida no modal **Abrir Solicitação** (`duplicate-guard.js`) antes de abrir o formulário do GitHub, incentivando voto 👍 em tickets existentes. |
+| **Nível 1 — Evento Imediato** | `issues: [opened, edited, reopened]` | ~5–15s após o evento | Analisa apenas a Issue do evento (`--mode single`) contra todo o histórico paginado (abertas e fechadas). |
+| **Nível 2 — Reconciliação Incremental** | `schedule: "12,42 * * * *"` (30 min) | A cada 30 min | Recupera eventos perdidos/editações e reavalia Issues alteradas nos últimos 30 dias usando cache incremental (`.cache/nox-duplicate-guard/state.json`). Se nunca houve backfill ou se `RULE_ENGINE_VERSION` mudou, promove automaticamente para `backfill`. |
+| **Nível 3 — Auditoria & Backfill Histórico** | `schedule: "17 4 * * *"` (diário) + `workflow_dispatch` (`mode: backfill`) | Diário às 04:17 UTC + sob demanda | Varre **todas as Issues abertas independentemente da data** em ordem cronológica ascendente (`oldest → newest`), processando em lotes (`batch_size: 50`) e pulando tickets inalterados já validados no cache. |
 
-### Avaliação sobre a sugestão nativa de Issues semelhantes do GitHub
+### Por que 30 minutos + Cache Incremental em vez de Cron de 5 minutos?
 
-O GitHub exibe sugestões básicas ao digitar o título da Issue na interface web, porém:
-1. Usuários que iniciam o fluxo pelo **Project Nox Tracker** só chegam ao formulário do GitHub depois de escolher uma categoria.
-2. O formulário oficial usa GitHub Issue Forms onde os dados críticos (nome da fonte, URL, parte afetada, stacktrace, URL antiga/nova) ficam no **corpo** da Issue, e não apenas no título — além de títulos só serem normalizados após a criação pelo workflow `label-issues.yml`.
-3. O recurso nativo do GitHub não distingue categorias, Mangá vs Anime, transições de domínio (`#130` vs `#153`) ou regressões entre versões.
-
-Por isso, o Tracker oferece busca prévia tolerante a variação de escrita/URLs antes do formulário oficial (sem reproduzir ou substituir o formulário do GitHub), e o detector pós-criação analisa os campos estruturados reais da Issue.
+Um cron de 5 minutos executaria 288 jobs/dia no GitHub Actions, consumindo minutos desnecessariamente e sofrendo atrasos/descartes de fila do scheduler gratuito. A combinação **evento imediato + reconciliação incremental a cada 30 min com cache por `(rule_version, updated_at, content_fingerprint, estado do canônico)` + auditoria completa diária** mantém reação rápida (~segundos na abertura), recupera falhas temporárias em até 30 min e reduz chamadas redundantes da API para quase zero quando nada mudou.
 
 ---
 
 ## 2. Critérios de Detecção por Categoria
 
-O motor aplica ordem total determinística `(created_at, number)`: uma Issue mais antiga nunca é encerrada em favor de uma mais nova, impedindo encerramentos mútuos mesmo em aberturas simultâneas. Pull Requests são ignorados.
+O motor aplica ordem total determinística `(created_at, number)`: uma Issue mais antiga nunca é fechada em favor de uma mais nova, evitando fechamento mútuo em aberturas simultâneas. Pull Requests são ignorados.
 
-1. **Nova extensão (`new_extension`):**
-   - Nunca mistura `Mangá` e `Anime`.
-   - Normaliza acentuação, capitalização, espaçamento, typos leves (ex.: `Wacht` vs `Watch`) e URLs (`http`/`https`, `www.`, barras finais, typos de esquema e plataformas compartilhadas como `github.io`, `workers.dev`, `t.me`, `blogspot`).
-   - Domínios distintos nunca encerram automaticamente.
-   - `confirmed_duplicate` exige candidato **aberto**, mesmo tipo (`Mangá`/`Anime`), mesmo domínio normalizado e identidade nominal compatível.
-2. **Extensão com problema (`bug`):**
-   - Exige mesma extensão e tipo compatível; **nunca** encerra apenas por mencionarem a mesma extensão.
-   - Rejeita automaticamente códigos HTTP contraditórios (`403` vs `404`), partes afetadas incompatíveis (ex.: `Login` vs `Leitor / Imagens`) e regressões contra tickets `Concluído` de versão anterior ou encerrados há ≥ 3 dias.
-   - Requer descrição suficiente (`≥ 15` caracteres úteis ou assinatura técnica explícita).
-   - `confirmed_duplicate` exige candidato aberto sem contradições e equivalência demonstrada (mesma parte/adjacente + assinatura técnica idêntica como `No pages found`/`NXDOMAIN`/`JsonDecodingException` ou alta similaridade combinada). Casos ambíguos (ex.: mesma extensão e erro de Cloudflare em partes distintas) geram apenas alerta `possible_duplicate`.
-3. **Mudança de domínio (`domain_change`):**
-   - Compara extensão, tipo, `URL antiga` e `URL nova` normalizadas.
-   - Se a `URL nova` diferir (ex.: `#130` vs `#153` na Fleur Blanche), retorna `no_match`.
-   - `confirmed_duplicate` exige candidato aberto com mesma `URL antiga` e mesma `URL nova` válidas.
-4. **Fonte indisponível (`dead_source`):**
-   - Considera fonte, domínio, janela temporal (padrão 30 dias) e natureza da evidência (encerramento definitivo vs instabilidade/manutenção temporária).
-   - Relatos temporários ou distantes no tempo não são encerrados automaticamente.
-5. **Sugestão de melhoria (`enhancement`):**
-   - Respeita o escopo (`Extensão relacionada (opcional)` ou menção clara no resumo), evitando misturar extensões distintas (ex.: `#144` Blackout Comics vs `#151` Hanami Heaven).
-   - Prioriza revisão humana (`possible_duplicate`); só permite encerramento automático quando o ticket candidato está aberto, o escopo é idêntico e a equivalência funcional é praticamente literal.
+1. **Nova extensão (`new_extension`):** nunca mistura `Mangá` e `Anime`; normaliza Unicode, espaços, typos leves (`Wacht` vs `Watch`) e URLs (`http`/`https`, `www.`, barras finais, typos reais de esquema e plataformas compartilhadas como `github.io`, `workers.dev`, `t.me`). Domínios distintos nunca fecham automaticamente.
+2. **Extensão com problema (`bug`):** exige mesma extensão e tipo compatível; nunca fecha apenas pelo nome da extensão. Rejeita códigos HTTP contraditórios (`403` vs `404`), partes afetadas incompatíveis (`Login` vs `Leitor`), descrições insuficientes (`< 15` chars sem erro técnico) e regressões contra tickets `Concluído` de versão anterior ou fechados há ≥ 3 dias.
+3. **Mudança de domínio (`domain_change`):** compara extensão, tipo, `URL antiga` e `URL nova`; se a `URL nova` diferir (ex.: `#130` vs `#153`), retorna `no_match`.
+4. **Fonte indisponível (`dead_source`):** exige mesma fonte, janela temporal (30 dias) e separa encerramento definitivo de instabilidade/manutenção temporária.
+5. **Sugestão de melhoria (`enhancement`):** isola por extensão relacionada (`#144` Blackout Comics vs `#151` Hanami Heaven) e prioriza revisão humana (`possible_duplicate`).
 
 ---
 
-## 3. Comentários, Encerramento Automático Seguro e Overrides
+## 3. Segurança de Comentários, Fechamento Transacional e Proteções
 
-- **Marcador interno estável:** todo comentário do bot inclui `<!-- nox-duplicate-guard:v1 issue=... decision=... canonical=... action=... fp=... -->`.
-- **Idempotência:** reexecuções com o mesmo resultado não postam comentários repetidos nem executam escritas redundantes. Se a Issue for editada e mudar de classificação (inclusive para `no_match`), o bot **atualiza o comentário existente**.
-- **Prevenção de cadeias e ciclos:** se um candidato já estiver marcado como `Duplicado`, o matcher segue a referência canônica até o ticket original válido sem ciclos.
-- **Proteções contra encerramento indevido:**
-  - Nunca encerra com base em ticket `Recusado`, `Cancelado` ou `Concluído`.
-  - Nunca re-encerra uma Issue que já recebeu `action=auto_closed` e foi reaberta manualmente pela equipe.
-  - Nunca encerra se houver labels de triagem/resolução humana (`Aceito`, `Em desenvolvimento`, `Concluído`, `Recusado`, `Cancelado`, `Duplicado`).
-  - Comentário contendo `<!-- nox-duplicate-guard:ignore -->` ou `/not-duplicate` bloqueia qualquer ação automática futura na Issue.
-- **Sequência formal de encerramento:**
-  1. Reconsulta ao vivo tanto a Issue alvo quanto o ticket canônico.
-  2. Aplica a label oficial `Duplicado`.
-  3. Remove labels de status incompatíveis (`Em análise`, `Aguardando informações`).
-  4. Publica/atualiza o comentário explicativo com link para o ticket original e incentivo a reagir com 👍 nele.
-  5. Fecha com `state: "closed"` e `state_reason: "duplicate"` (fallback para `"not_planned"` em HTTP 422).
+- **Validação estrita de autoria:**
+  - Apenas comentários de `github-actions[bot]` (`type: Bot`) com marcador `<!-- nox-duplicate-guard:v1 issue=<N> ... -->` são reconhecidos e editados pelo bot. Marcadores falsificados ou copiados por usuários comuns são ignorados.
+  - Comandos de override (`/not-duplicate` ou `<!-- nox-duplicate-guard:ignore -->`) só são aceitos quando publicados por contas com `author_association` em `OWNER`, `MEMBER` ou `COLLABORATOR`, ou quando uma label controlada (`ignorar-duplicata` / `duplicate-guard:ignore`) está aplicada na Issue.
+- **Sequência transacional do encerramento automático (`auto_closed`):**
+  1. Reconsulta ao vivo a Issue alvo e o ticket original (canônico precisa estar `open` e não ser `Duplicado`).
+  2. **Publica/atualiza primeiro o comentário explicativo** com a justificativa e link para o original. Se falhar, aborta imediatamente (`aborted_comment_failed`) sem rotular nem fechar.
+  3. Aplica a label oficial `Duplicado`. Se falhar, rebaixa o comentário para `commented` e aborta antes de fechar.
+  4. Fecha a Issue com `state_reason: "duplicate"` (fallback automático para `"not_planned"` em HTTP 422). Se o fechamento falhar, **reverte a label `Duplicado`** e ajusta o comentário, evitando Issues abertas com label de resolução inconsistente.
+  5. Remove labels iniciais (`Em análise`, `Aguardando informações`) apenas após confirmação do fechamento.
+- **Preservação de intervenções humanas:** nunca fecha nem remove `Aceito`, `Em desenvolvimento`, `Concluído`, `Recusado` ou `Cancelado`; nunca re-fecha Issues reabertas por humanos (`state_reason == "reopened"` ou reabertura após `auto_closed`).
 
 ---
 
-## 4. Interação com os Workflows Existentes
+## 4. Limpeza Retroativa (`backfill`), Precedência e Operação
 
-- `.github/workflows/label-issues.yml`: normaliza títulos e classifica tipo/categoria/+18/status inicial. Foi endurecido para ignorar Pull Requests e reconsultar `state` e `labels` ao vivo antes de aplicar `Em análise`, evitando condição de corrida caso o Duplicate Guard já tenha encerrado a Issue como `Duplicado`.
-- `.github/workflows/close-issue.yml`: mantém o encerramento manual formal pela equipe via `workflow_dispatch` (compatível com as mesmas labels `Duplicado`, `Concluído`, `Recusado`, `Cancelado`).
-- `.github/workflows/issue-closed-guard.yml`: continua validando se Issues fechadas possuem label formal de resolução (`Duplicado` satisfaz integralmente essa verificação).
+### Precedência de configuração
 
----
+1. Base: [`.github/duplicate-guard.json`](../.github/duplicate-guard.json) (`enabled: true`, `auto_close_enabled: true`, `dry_run: false`, `batch_size: 50`).
+2. Variáveis de repositório (*Settings → Actions → Variables*): `NOX_DUPLICATE_GUARD_ENABLED`, `NOX_DUPLICATE_GUARD_AUTO_CLOSE`, `NOX_DUPLICATE_GUARD_DRY_RUN`.
+3. Parâmetros manuais de `workflow_dispatch` ou flags CLI (`--auto-close`, `--dry-run`/`--no-dry-run`, `--batch-size`).
 
-## 5. Operação, Dry-Run, Desativação e Diagnóstico
+### Executar simulação e limpeza retroativa manualmente
 
-### Configuração central
-
-Os parâmetros ficam em [`.github/duplicate-guard.json`](../.github/duplicate-guard.json).
-
-### Desativação rápida (Kill-switch) ou desativação do auto-close
-
-Sem editar código, configure **Repository Variables** em *Settings → Secrets and variables → Actions → Variables*:
-- `NOX_DUPLICATE_GUARD_ENABLED=false` — desativa completamente o detector e a reconciliação.
-- `NOX_DUPLICATE_GUARD_AUTO_CLOSE=false` — mantém apenas comentários de alerta para revisão humana, sem encerrar Issues.
-- `NOX_DUPLICATE_GUARD_DRY_RUN=true` — executa todo o pipeline em modo de simulação sem alterar Issues.
-
-Também é possível alterar `enabled`, `auto_close_enabled` ou `dry_run` diretamente em `.github/duplicate-guard.json`.
-
-### Execução local em `dry-run`
+1. **Simulação completa (`dry-run`):** no GitHub Actions, execute **Nox Duplicate Guard → Run workflow** com `mode=backfill`, `dry_run=true`, `auto_close=config`. O *Job Summary* listará exatamente quais Issues antigas e novas seriam fechadas e quais ficariam abertas como `possible_duplicate`.
+2. **Limpeza real em lote (`backfill`):** após revisar o relatório da simulação, execute `mode=backfill`, `dry_run=false`, `auto_close=true`, `batch_size=50`.
+3. **Execução offline/local segura:**
 
 ```bash
-# Simular contra fixtures locais (100% offline)
+# Validar contra fixtures locais
 python3 -m scripts.duplicate_guard.cli \
-  --mode reconcile \
-  --fixtures-file tests/fixtures/real_issues_snapshot.json \
-  --lookback-days 3650
+  --mode backfill \
+  --fixtures-file tests/fixtures/real_issues_snapshot.json
 
-# Simular contra as Issues reais do repositório (somente leitura)
-GITHUB_TOKEN="$(gh auth token)" python3 -m scripts.duplicate_guard.cli \
-  --mode reconcile \
+# Simular contra o repositório real (somente leitura)
+GH_TOKEN="$(gh auth token)" python3 -m scripts.duplicate_guard.cli \
+  --mode backfill \
   --dry-run \
-  --lookback-days 60
+  --repo ProjectNox-org/project-nox-requests
 ```
 
-### Executar testes e métricas
+### Desativação rápida (Kill-switch)
+
+- `NOX_DUPLICATE_GUARD_ENABLED=false` — desativa o bot inteiro.
+- `NOX_DUPLICATE_GUARD_AUTO_CLOSE=false` — mantém detecção e comentários informativos sem fechar nenhuma Issue automaticamente.
+
+### Testes e métricas
 
 ```bash
 python3 -m pip install pytest pyyaml
 python3 -m pytest -v -s tests/
 ```
 
-### Como revisar falsos positivos
+---
 
-1. Se o bot fechou uma Issue incorretamente, reabra a Issue, remova a label `Duplicado`, restaure `Em análise` (ou aplique a label correta) e, se desejar impedir novas avaliações automáticas naquela Issue, comente `/not-duplicate`. (A simples reabertura após `auto_closed` já bloqueia automaticamente um segundo auto-close!)
-2. Ajuste os limiares ou adicione um caso de regressão em `tests/test_duplicate_guard.py` e `tests/test_duplicate_guard_metrics.py`.
+## 5. Interação com Workflows Existentes
 
-### Diagnóstico de falhas
-
-- Consulte os logs e o *Job Summary* do workflow **Nox Duplicate Guard** na aba *Actions*: cada execução imprime um JSON estruturado com `classification`, `canonical_issue`, `action_taken`, `skipped_reason` e `partial_errors`.
-- Em falhas transitórias da API ou `rate limit`, o cliente executa até 3 tentativas com backoff e aborta de forma conservadora sem encerrar ou corromper Issues; a rotina agendada de reconciliação (`cron: "23 */6 * * *"`) reavalia pendências automaticamente.
+- `.github/workflows/label-issues.yml`: normaliza títulos/labels, ignora PRs e reconsulta `state`/`labels` ao vivo antes de aplicar `Em análise`.
+- `.github/workflows/close-issue.yml` e `.github/workflows/issue-closed-guard.yml`: operam normalmente com a label oficial `Duplicado`.
 
 ---
 

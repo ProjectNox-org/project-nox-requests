@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import re
+import sys
 from typing import Protocol
 
 from .github_client import GitHubApiError, PermissionDeniedError, RateLimitError
@@ -13,6 +14,9 @@ from .models import (
     HUMAN_INTERVENTION_LABELS,
     INCOMPATIBLE_STATUS_LABELS_ON_DUPLICATE,
     LABEL_DUPLICATE,
+    MAINTAINER_OVERRIDE_LABELS,
+    TRUSTED_AUTHOR_ASSOCIATIONS,
+    TRUSTED_BOT_LOGINS,
     ActionResult,
     GuardConfig,
     GuardDecision,
@@ -71,18 +75,68 @@ def parse_marker(body: str) -> dict[str, str] | None:
     return attrs
 
 
-def find_existing_bot_comment(comments: list[dict]) -> tuple[dict | None, dict[str, str] | None]:
-    """Return the latest bot comment containing the guard marker, if any."""
+def is_trusted_bot_comment(comment: dict) -> bool:
+    """Return True only when comment was authored by the official GitHub Actions bot."""
+    if not isinstance(comment, dict):
+        return False
+    user = comment.get("user")
+    if not isinstance(user, dict):
+        return False
+    login = str(user.get("login") or "").strip().lower()
+    user_type = str(user.get("type") or "").strip().lower()
+    if login not in TRUSTED_BOT_LOGINS:
+        return False
+    return user_type == "bot" or login.endswith("[bot]")
+
+
+def is_trusted_maintainer_comment(comment: dict) -> bool:
+    """Return True only when comment was authored by a verified repo maintainer/collaborator."""
+    if not isinstance(comment, dict):
+        return False
+    user = comment.get("user")
+    if not isinstance(user, dict):
+        return False
+    login = str(user.get("login") or "").strip()
+    user_type = str(user.get("type") or "").strip().lower()
+    if not login or user_type == "bot" or login.lower().endswith("[bot]"):
+        return False
+    if user_type and user_type != "user":
+        return False
+    assoc = str(comment.get("author_association") or "").strip().upper()
+    return assoc in TRUSTED_AUTHOR_ASSOCIATIONS
+
+
+def find_existing_bot_comment(
+    comments: list[dict],
+    issue_number: int | None = None,
+) -> tuple[dict | None, dict[str, str] | None]:
+    """Return the latest trusted bot comment containing a valid marker for this issue."""
     for comment in reversed(comments):
+        if not is_trusted_bot_comment(comment):
+            continue
         meta = parse_marker(str(comment.get("body") or ""))
-        if meta is not None:
-            return comment, meta
+        if meta is None:
+            continue
+        if issue_number is not None and meta.get("issue") and meta.get("issue") != str(issue_number):
+            continue
+        return comment, meta
     return None, None
 
 
-def has_manual_ignore_override(comments: list[dict]) -> bool:
-    """Return True if a maintainer added a manual duplicate-guard override marker."""
-    return any(_IGNORE_OVERRIDE_RE.search(str(c.get("body") or "")) for c in comments)
+def has_manual_ignore_override(
+    comments: list[dict],
+    live_issue: RawIssue | None = None,
+) -> bool:
+    """Return True only when an authorized maintainer label or verified comment requests ignore."""
+    if live_issue is not None:
+        issue_labels = {l.strip().lower() for l in live_issue.labels}
+        if issue_labels & {lbl.lower() for lbl in MAINTAINER_OVERRIDE_LABELS}:
+            return True
+    for comment in comments:
+        if _IGNORE_OVERRIDE_RE.search(str(comment.get("body") or "")):
+            if is_trusted_maintainer_comment(comment):
+                return True
+    return False
 
 
 def render_comment_body(
@@ -132,7 +186,17 @@ def render_comment_body(
         "",
     ]
     if canon_num is not None:
-        lines.append(f"**Possível ticket original:** #{canon_num}")
+        title_hint = ""
+        canon_raw = issues_by_number.get(canon_num)
+        if canon_raw:
+            title_hint = f" — {sanitize_for_markdown(canon_raw.title, 100)}"
+        lines.append(f"**Possível ticket original:** #{canon_num}{title_hint}")
+        lines.append("")
+
+    if decision.classification == "confirmed_duplicate" and decision.reasons:
+        lines.append("**Critérios identificados:**")
+        for r in decision.reasons[:3]:
+            lines.append(f"- {sanitize_for_markdown(r, 180)}")
         lines.append("")
 
     if decision.candidates:
@@ -185,9 +249,9 @@ class GuardActionExecutor:
                 skipped_reason=str(exc),
             )
 
-        existing_comment, existing_meta = find_existing_bot_comment(comments)
+        existing_comment, existing_meta = find_existing_bot_comment(comments, issue_number=num)
 
-        if has_manual_ignore_override(comments):
+        if has_manual_ignore_override(comments, live_issue=live_issue):
             return ActionResult(
                 issue_number=num,
                 decision=decision.classification,
@@ -287,14 +351,16 @@ class GuardActionExecutor:
                 num, decision, "commented", body, existing_comment, skipped_reason=block_reason
             )
 
-        # Perform formal duplicate closure cleanly with partial-failure isolation
+        # Perform formal duplicate closure transactionally:
+        # 1. Verify canonical live -> 2. Register justification comment -> 3. Apply label Duplicado ->
+        # 4. Close issue (rollback label on failure) -> 5. Remove initial triage status labels.
         partial_errors: list[str] = []
         labels_added: list[str] = []
         labels_removed: list[str] = []
         comment_id: int | None = existing_comment.get("id") if existing_comment else None
         closed_ok = False
 
-        # 1. Verify canonical issue is STILL open on live API right before closing
+        # 1. Verify canonical issue is STILL open on live API right before mutating anything
         try:
             assert decision.canonical_issue is not None
             live_canon = RawIssue.from_github_dict(self.client.get_issue(decision.canonical_issue))
@@ -309,6 +375,7 @@ class GuardActionExecutor:
                     skipped_reason="live_canonical_no_longer_open",
                 )
         except (RateLimitError, PermissionDeniedError, GitHubApiError) as exc:
+            print(f"[Nox Duplicate Guard] Issue #{num}: falha ao verificar canônico ao vivo: {exc}", file=sys.stderr)
             return ActionResult(
                 issue_number=num,
                 decision=decision.classification,
@@ -318,33 +385,7 @@ class GuardActionExecutor:
                 skipped_reason=str(exc),
             )
 
-        # 2. Add official label Duplicado
-        if LABEL_DUPLICATE not in live_issue.labels:
-            try:
-                self.client.add_labels(num, [LABEL_DUPLICATE])
-                labels_added.append(LABEL_DUPLICATE)
-            except (RateLimitError, PermissionDeniedError, GitHubApiError) as exc:
-                partial_errors.append(f"add_label:{exc}")
-                # Do not close without formal label if permission denied or failed
-                return ActionResult(
-                    issue_number=num,
-                    decision=decision.classification,
-                    canonical_issue=decision.canonical_issue,
-                    action_taken="partial_failure_before_close",
-                    dry_run=False,
-                    partial_errors=tuple(partial_errors),
-                )
-
-        # 3. Remove incompatible status labels
-        for lbl in INCOMPATIBLE_STATUS_LABELS_ON_DUPLICATE:
-            if lbl in live_issue.labels:
-                try:
-                    self.client.remove_label(num, lbl)
-                    labels_removed.append(lbl)
-                except (RateLimitError, PermissionDeniedError, GitHubApiError) as exc:
-                    partial_errors.append(f"remove_label({lbl}):{exc}")
-
-        # 4. Create or update explanatory comment
+        # 2. Create or update explanatory comment BEFORE adding resolution label or closing
         try:
             if existing_comment and existing_comment.get("id"):
                 updated = self.client.update_comment(int(existing_comment["id"]), body)
@@ -353,14 +394,74 @@ class GuardActionExecutor:
                 created = self.client.create_comment(num, body)
                 comment_id = created.get("id")
         except (RateLimitError, PermissionDeniedError, GitHubApiError) as exc:
-            partial_errors.append(f"comment:{exc}")
+            print(f"[Nox Duplicate Guard] Issue #{num}: falha ao registrar justificativa antes de fechar: {exc}", file=sys.stderr)
+            return ActionResult(
+                issue_number=num,
+                decision=decision.classification,
+                canonical_issue=decision.canonical_issue,
+                action_taken="aborted_comment_failed",
+                dry_run=False,
+                comment_id=comment_id,
+                partial_errors=(f"comment:{exc}",),
+            )
 
-        # 5. Close issue with state_reason='duplicate'
+        # 3. Add official label Duplicado
+        added_dup_now = False
+        if LABEL_DUPLICATE not in live_issue.labels:
+            try:
+                self.client.add_labels(num, [LABEL_DUPLICATE])
+                labels_added.append(LABEL_DUPLICATE)
+                added_dup_now = True
+            except (RateLimitError, PermissionDeniedError, GitHubApiError) as exc:
+                print(f"[Nox Duplicate Guard] Issue #{num}: falha ao aplicar label Duplicado: {exc}", file=sys.stderr)
+                partial_errors.append(f"add_label:{exc}")
+                self._downgrade_comment_after_failure(num, comment_id, decision, partial_errors)
+                return ActionResult(
+                    issue_number=num,
+                    decision=decision.classification,
+                    canonical_issue=decision.canonical_issue,
+                    action_taken="partial_failure_before_close",
+                    dry_run=False,
+                    comment_id=comment_id,
+                    partial_errors=tuple(partial_errors),
+                )
+
+        # 4. Close issue with state_reason='duplicate' (rollback Duplicado label if close fails)
         try:
             self.client.close_issue(num, state_reason="duplicate")
             closed_ok = True
         except (RateLimitError, PermissionDeniedError, GitHubApiError) as exc:
+            print(f"[Nox Duplicate Guard] Issue #{num}: falha ao fechar issue como duplicada: {exc}", file=sys.stderr)
             partial_errors.append(f"close:{exc}")
+            if added_dup_now:
+                try:
+                    self.client.remove_label(num, LABEL_DUPLICATE)
+                    labels_added.clear()
+                except (RateLimitError, PermissionDeniedError, GitHubApiError) as rb_exc:
+                    print(f"[Nox Duplicate Guard] Issue #{num}: falha ao reverter label Duplicado: {rb_exc}", file=sys.stderr)
+                    partial_errors.append(f"rollback_label:{rb_exc}")
+            self._downgrade_comment_after_failure(num, comment_id, decision, partial_errors)
+            return ActionResult(
+                issue_number=num,
+                decision=decision.classification,
+                canonical_issue=decision.canonical_issue,
+                action_taken="partial_failure_before_close",
+                dry_run=False,
+                comment_id=comment_id,
+                labels_added=tuple(labels_added),
+                closed=False,
+                partial_errors=tuple(partial_errors),
+            )
+
+        # 5. Remove incompatible triage status labels ONLY after formal closure succeeds
+        for lbl in INCOMPATIBLE_STATUS_LABELS_ON_DUPLICATE:
+            if lbl in live_issue.labels:
+                try:
+                    self.client.remove_label(num, lbl)
+                    labels_removed.append(lbl)
+                except (RateLimitError, PermissionDeniedError, GitHubApiError) as exc:
+                    print(f"[Nox Duplicate Guard] Issue #{num}: falha ao remover label '{lbl}': {exc}", file=sys.stderr)
+                    partial_errors.append(f"remove_label({lbl}):{exc}")
 
         return ActionResult(
             issue_number=num,
@@ -375,6 +476,22 @@ class GuardActionExecutor:
             partial_errors=tuple(partial_errors),
         )
 
+    def _downgrade_comment_after_failure(
+        self,
+        issue_number: int,
+        comment_id: int | None,
+        decision: GuardDecision,
+        partial_errors: list[str],
+    ) -> None:
+        if not comment_id:
+            return
+        try:
+            fallback_body = render_comment_body(decision, "commented", self.issues_by_number)
+            self.client.update_comment(int(comment_id), fallback_body)
+        except (RateLimitError, PermissionDeniedError, GitHubApiError) as exc:
+            print(f"[Nox Duplicate Guard] Issue #{issue_number}: falha ao ajustar comentário após erro parcial: {exc}", file=sys.stderr)
+            partial_errors.append(f"downgrade_comment:{exc}")
+
     def _check_live_auto_close_safety(
         self,
         decision: GuardDecision,
@@ -385,8 +502,15 @@ class GuardActionExecutor:
             return False, decision.blocked_reason
         if live_issue.state != "open":
             return False, "live_issue_already_closed"
-        if set(live_issue.labels) & HUMAN_INTERVENTION_LABELS:
+        issue_labels_lower = {l.strip().lower() for l in live_issue.labels}
+        if issue_labels_lower & {lbl.lower() for lbl in MAINTAINER_OVERRIDE_LABELS}:
+            return False, "manual_ignore_override"
+        # Protect maintainer triage/resolution labels (except stale Duplicado left if an earlier rollback failed)
+        protected_labels = HUMAN_INTERVENTION_LABELS - {LABEL_DUPLICATE}
+        if set(live_issue.labels) & protected_labels:
             return False, "human_intervention_label_present"
+        if live_issue.state_reason == "reopened":
+            return False, "previously_auto_closed_then_reopened"
         # Respect human reopen: if bot previously auto-closed this issue and it's open again, do NOT re-close!
         if existing_meta and existing_meta.get("action") == "auto_closed":
             return False, "previously_auto_closed_then_reopened"

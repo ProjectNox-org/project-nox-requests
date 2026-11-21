@@ -4,15 +4,17 @@ on:
   issues:
     types: [opened, edited, reopened]
   schedule:
-    - cron: "23 */6 * * *"
+    - cron: "12,42 * * * *"
+    - cron: "17 4 * * *"
   workflow_dispatch:
     inputs:
       mode:
-        description: "Modo de execução (single ou reconcile)"
+        description: "Modo de execução (backfill, reconcile ou single)"
         required: true
         type: choice
-        default: reconcile
+        default: backfill
         options:
+          - backfill
           - reconcile
           - single
       issue_number:
@@ -34,10 +36,15 @@ on:
           - "true"
           - "false"
       lookback_days:
-        description: "Janela de dias para reconciliação"
+        description: "Janela de dias para reconciliação incremental"
         required: false
         type: string
         default: "30"
+      batch_size:
+        description: "Máximo de Issues processadas por lote (reconcile/backfill)"
+        required: false
+        type: string
+        default: "50"
 
 permissions:
   contents: read
@@ -63,17 +70,27 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Restaurar cache incremental do Duplicate Guard
+        uses: actions/cache@v4
+        with:
+          path: .cache/nox-duplicate-guard
+          key: nox-duplicate-guard-${{ github.repository_id }}-v1-${{ github.run_id }}
+          restore-keys: |
+            nox-duplicate-guard-${{ github.repository_id }}-v1-
+
       - name: Executar Nox Duplicate Guard
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           GITHUB_EVENT_PATH: ${{ github.event_path }}
+          GITHUB_EVENT_SCHEDULE: ${{ github.event.schedule }}
           INPUT_MODE: ${{ github.event.inputs.mode }}
           INPUT_ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
           INPUT_DRY_RUN: ${{ github.event.inputs.dry_run }}
           INPUT_AUTO_CLOSE: ${{ github.event.inputs.auto_close }}
           INPUT_LOOKBACK_DAYS: ${{ github.event.inputs.lookback_days }}
+          INPUT_BATCH_SIZE: ${{ github.event.inputs.batch_size }}
           NOX_DUPLICATE_GUARD_ENABLED: ${{ vars.NOX_DUPLICATE_GUARD_ENABLED }}
           NOX_DUPLICATE_GUARD_AUTO_CLOSE: ${{ vars.NOX_DUPLICATE_GUARD_AUTO_CLOSE }}
           NOX_DUPLICATE_GUARD_DRY_RUN: ${{ vars.NOX_DUPLICATE_GUARD_DRY_RUN }}
@@ -84,10 +101,11 @@ jobs:
           import sys
 
           event_name = os.environ.get("GITHUB_EVENT_NAME", "")
+          schedule_expr = (os.environ.get("GITHUB_EVENT_SCHEDULE") or "").strip()
           cmd = [sys.executable, "-m", "scripts.duplicate_guard.cli"]
 
           if event_name == "workflow_dispatch":
-              mode = os.environ.get("INPUT_MODE") or "reconcile"
+              mode = os.environ.get("INPUT_MODE") or "backfill"
               cmd.extend(["--mode", mode])
               issue_num = (os.environ.get("INPUT_ISSUE_NUMBER") or "").strip()
               if mode == "single" and issue_num.isdigit():
@@ -95,13 +113,17 @@ jobs:
               lookback = (os.environ.get("INPUT_LOOKBACK_DAYS") or "30").strip()
               if lookback.isdigit():
                   cmd.extend(["--lookback-days", lookback])
+              batch_size = (os.environ.get("INPUT_BATCH_SIZE") or "50").strip()
+              if batch_size.isdigit():
+                  cmd.extend(["--batch-size", batch_size])
               dry_run_input = (os.environ.get("INPUT_DRY_RUN") or "true").strip().lower()
               cmd.append("--dry-run" if dry_run_input == "true" else "--no-dry-run")
               auto_close = (os.environ.get("INPUT_AUTO_CLOSE") or "config").strip().lower()
               if auto_close in ("config", "true", "false"):
                   cmd.extend(["--auto-close", auto_close])
           elif event_name == "schedule":
-              cmd.extend(["--mode", "reconcile"])
+              mode = "backfill" if schedule_expr == "17 4 * * *" else "reconcile"
+              cmd.extend(["--mode", mode])
           else:
               cmd.extend(["--mode", "single"])
 

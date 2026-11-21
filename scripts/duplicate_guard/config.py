@@ -91,6 +91,7 @@ def load_config(config_path: Path | str | None = None) -> GuardConfig:
         auto_close_enabled=auto_close_enabled,
         dry_run=dry_run,
         reconcile_lookback_days=max(1, int(data.get("reconcile_lookback_days", 30))),
+        batch_size=max(1, int(data.get("batch_size", 50))),
         max_candidates_in_comment=max(1, min(5, int(data.get("max_candidates_in_comment", 3)))),
         dead_source_window_days=max(1, int(data.get("dead_source_window_days", 30))),
         bug_regression_days=max(0, int(data.get("bug_regression_days", 3))),

@@ -103,28 +103,43 @@ class InMemoryGitHubApi:
         self.next_comment_id = 5000
         self.writes: list[tuple[str, int, Any]] = []
         self.fail_on: dict[str, Exception] = {}
+        self.api_calls_made = 0
+
+    def list_issues(self, *, state: str = "all") -> list[dict]:
+        self.api_calls_made += 1
+        if state == "all":
+            return [dict(v) for v in self.issues.values()]
+        return [dict(v) for v in self.issues.values() if v.get("state") == state]
 
     def get_issue(self, issue_number: int) -> dict:
+        self.api_calls_made += 1
         if "get_issue" in self.fail_on:
             raise self.fail_on["get_issue"]
         return dict(self.issues[issue_number])
 
     def list_comments(self, issue_number: int) -> list[dict]:
+        self.api_calls_made += 1
         if "list_comments" in self.fail_on:
             raise self.fail_on["list_comments"]
         return list(self.comments.get(issue_number, []))
 
     def create_comment(self, issue_number: int, body: str) -> dict:
+        self.api_calls_made += 1
         if "create_comment" in self.fail_on:
             raise self.fail_on["create_comment"]
         self.next_comment_id += 1
-        c = {"id": self.next_comment_id, "body": body}
+        c = {
+            "id": self.next_comment_id,
+            "body": body,
+            "user": {"login": "github-actions[bot]", "type": "Bot"},
+        }
         self.comments.setdefault(issue_number, []).append(c)
         self.issues[issue_number]["comments"] = len(self.comments[issue_number])
         self.writes.append(("create_comment", issue_number, c["id"]))
         return c
 
     def update_comment(self, comment_id: int, body: str) -> dict:
+        self.api_calls_made += 1
         if "update_comment" in self.fail_on:
             raise self.fail_on["update_comment"]
         for num, clist in self.comments.items():
@@ -136,6 +151,7 @@ class InMemoryGitHubApi:
         raise KeyError(comment_id)
 
     def add_labels(self, issue_number: int, labels: list[str]) -> None:
+        self.api_calls_made += 1
         if "add_labels" in self.fail_on:
             raise self.fail_on["add_labels"]
         existing = {l["name"] for l in self.issues[issue_number]["labels"]}
@@ -145,6 +161,7 @@ class InMemoryGitHubApi:
         self.writes.append(("add_labels", issue_number, list(labels)))
 
     def remove_label(self, issue_number: int, label_name: str) -> None:
+        self.api_calls_made += 1
         if "remove_label" in self.fail_on:
             raise self.fail_on["remove_label"]
         self.issues[issue_number]["labels"] = [
@@ -153,6 +170,7 @@ class InMemoryGitHubApi:
         self.writes.append(("remove_label", issue_number, label_name))
 
     def close_issue(self, issue_number: int, *, state_reason: str = "duplicate") -> dict:
+        self.api_calls_made += 1
         if "close_issue" in self.fail_on:
             raise self.fail_on["close_issue"]
         self.issues[issue_number]["state"] = "closed"
@@ -652,6 +670,7 @@ def test_21_existing_bot_comment_updated_not_duplicated():
     i2 = make_raw(11, "[Problema na extensão]: Bakai — Problema no leitor", "### Tipo de extensão\nMangá\n### Nome da extensão\nBakai\n### Parte afetada\nLeitor / Imagens\n### O que está acontecendo?\nCapítulos não abrem no leitor\n", labels=["Problema na extensão", "Mangá"], created_at="2026-11-02T10:00:00Z")
     existing_comment = {
         "id": 999,
+        "user": {"login": "github-actions[bot]", "type": "Bot"},
         "body": "<!-- nox-duplicate-guard:v1 issue=11 decision=possible_duplicate canonical=10 action=commented fp=old -->\nOld alert",
     }
     api = InMemoryGitHubApi([i1, i2], initial_comments={11: [existing_comment]})
@@ -752,7 +771,7 @@ def test_26_execution_without_write_permission_and_dry_run_guard():
         client.create_comment(10, "blocked")
 
     i1 = make_raw(10, "[Nova extensão]: PermSite", "### Tipo de extensão\nMangá\n### Nome da fonte\nPermSite\n### URL do site\nhttps://permsite.com\n", labels=["Nova extensão", "Mangá"], created_at="2026-11-01T10:00:00Z")
-    i2 = make_raw(11, "[Nova extensão]: PermSite", "### Tipo de extensão\nMangá\n### Nome da fonte\nPermSite\n### URL do site\nhttps://permsite.com\n", labels=["Nova extensão", "Mangá"], created_at="2026-11-02T10:00:00Z")
+    i2 = make_raw(11, "[Nova extensão]: PermSite", "### Tipo de extensão\nMangá\n### Nome da fonte\nPermSite\n### URL do site\nhttps://permsite.com\n", labels=["Nova extensão", "Mangá", "Em análise"], created_at="2026-11-02T10:00:00Z")
     api = InMemoryGitHubApi([i1, i2])
     api.fail_on["add_labels"] = PermissionDeniedError("Resource not accessible by integration", status=403)
     cfg = load_config(REPO_ROOT / ".github" / "duplicate-guard.json")
@@ -761,19 +780,76 @@ def test_26_execution_without_write_permission_and_dry_run_guard():
     assert res.action_taken == "partial_failure_before_close"
     assert res.closed is False
     assert api.issues[11]["state"] == "open"
+    assert "Duplicado" not in {l["name"] for l in api.issues[11]["labels"]}
 
 
 def test_27_partial_failure_during_comment_or_close_recorded_safely():
     i1 = make_raw(10, "[Nova extensão]: PartSite", "### Tipo de extensão\nMangá\n### Nome da fonte\nPartSite\n### URL do site\nhttps://partsite.com\n", labels=["Nova extensão", "Mangá"], created_at="2026-11-01T10:00:00Z")
-    i2 = make_raw(11, "[Nova extensão]: PartSite", "### Tipo de extensão\nMangá\n### Nome da fonte\nPartSite\n### URL do site\nhttps://partsite.com\n", labels=["Nova extensão", "Mangá"], created_at="2026-11-02T10:00:00Z")
-    api = InMemoryGitHubApi([i1, i2])
-    api.fail_on["create_comment"] = PermissionDeniedError("comment blocked", status=403)
+    i2 = make_raw(11, "[Nova extensão]: PartSite", "### Tipo de extensão\nMangá\n### Nome da fonte\nPartSite\n### URL do site\nhttps://partsite.com\n", labels=["Nova extensão", "Mangá", "Em análise"], created_at="2026-11-02T10:00:00Z")
     cfg = load_config(REPO_ROOT / ".github" / "duplicate-guard.json")
     dec = evaluate_pair([i1, i2], 11, cfg)
-    res = GuardActionExecutor(api, cfg, {10: i1, 11: i2}).apply(dec)
-    assert "Duplicado" in res.labels_added
-    assert len(res.partial_errors) == 1
-    assert res.partial_errors[0].startswith("comment:")
+
+    # Case A: failure to create comment aborts BEFORE applying Duplicado or closing
+    api_comment_fail = InMemoryGitHubApi([i1, i2])
+    api_comment_fail.fail_on["create_comment"] = PermissionDeniedError("comment blocked", status=403)
+    res_a = GuardActionExecutor(api_comment_fail, cfg, {10: i1, 11: i2}).apply(dec)
+    assert res_a.action_taken == "aborted_comment_failed"
+    assert res_a.closed is False
+    assert res_a.labels_added == ()
+    assert api_comment_fail.issues[11]["state"] == "open"
+    lbls_a = {l["name"] for l in api_comment_fail.issues[11]["labels"]}
+    assert "Duplicado" not in lbls_a
+    assert "Em análise" in lbls_a
+
+    # Case B: failure on close_issue rolls back Duplicado label and downgrades comment; retry recovers cleanly without duplicate comments
+    api_close_fail = InMemoryGitHubApi([i1, i2])
+    api_close_fail.fail_on["close_issue"] = PermissionDeniedError("close failed temporarily", status=403)
+    res_b1 = GuardActionExecutor(api_close_fail, cfg, {10: i1, 11: i2}).apply(dec)
+    assert res_b1.action_taken == "partial_failure_before_close"
+    assert res_b1.closed is False
+    lbls_b1 = {l["name"] for l in api_close_fail.issues[11]["labels"]}
+    assert "Duplicado" not in lbls_b1
+    assert "Em análise" in lbls_b1
+    assert len(api_close_fail.comments[11]) == 1
+
+    # Recovery run succeeds and reuses the single existing bot comment
+    api_close_fail.fail_on.pop("close_issue")
+    res_b2 = GuardActionExecutor(api_close_fail, cfg, {10: i1, 11: i2}).apply(dec)
+    assert res_b2.action_taken == "auto_closed"
+    assert res_b2.closed is True
+    assert len(api_close_fail.comments[11]) == 1
+    lbls_b2 = {l["name"] for l in api_close_fail.issues[11]["labels"]}
+    assert "Duplicado" in lbls_b2
+    assert "Em análise" not in lbls_b2
+
+    # Case C: GitHubClient.close_issue falls back from state_reason='duplicate' to 'not_planned' on HTTP 422
+    gh_client = GitHubClient("ProjectNox-org/project-nox-requests", token="dummy", sleep_fn=lambda _: None)
+    seen_payloads: list[dict] = []
+
+    class FakeOkResp:
+        status = 200
+        headers = {}
+
+        def read(self):
+            return json.dumps({"number": 11, "state": "closed", "state_reason": "not_planned"}).encode("utf-8")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    def fake_close_urlopen(req, timeout=25):
+        body = json.loads(req.data.decode("utf-8"))
+        seen_payloads.append(body)
+        if body.get("state_reason") == "duplicate":
+            raise _http_err(422, {}, "Validation Failed")
+        return FakeOkResp()
+
+    with patch("scripts.duplicate_guard.github_client.urlopen", side_effect=fake_close_urlopen):
+        closed_res = gh_client.close_issue(11, state_reason="duplicate")
+    assert closed_res["state_reason"] == "not_planned"
+    assert [p["state_reason"] for p in seen_payloads] == ["duplicate", "not_planned"]
 
 
 def test_28_reconciliation_chain_prevention_and_human_override_protection():
@@ -790,16 +866,162 @@ def test_28_reconciliation_chain_prevention_and_human_override_protection():
 
     # Human reopen protection: if #12 had bot action=auto_closed previously and is open again, do NOT re-close!
     api = InMemoryGitHubApi([i10, i12], initial_comments={
-        12: [{"id": 77, "body": "<!-- nox-duplicate-guard:v1 issue=12 decision=confirmed_duplicate canonical=10 action=auto_closed fp=abc -->"}]
+        12: [{
+            "id": 77,
+            "user": {"login": "github-actions[bot]", "type": "Bot"},
+            "body": "<!-- nox-duplicate-guard:v1 issue=12 decision=confirmed_duplicate canonical=10 action=auto_closed fp=abc -->",
+        }]
     })
     res_reopened = GuardActionExecutor(api, cfg, {10: i10, 12: i12}).apply(dec)
     assert res_reopened.closed is False
     assert api.issues[12]["state"] == "open"
     assert res_reopened.skipped_reason == "previously_auto_closed_then_reopened"
 
-    # CLI offline fixture reconciliation mode executes cleanly
-    rc = run_cli(["--mode", "reconcile", "--fixtures-file", str(FIXTURES_PATH), "--lookback-days", "3650"])
+    # CLI offline fixture reconciliation & backfill modes execute cleanly
+    rc = run_cli(["--mode", "backfill", "--fixtures-file", str(FIXTURES_PATH)])
     assert rc == 0
+
+
+def test_29_comment_security_spoofing_and_untrusted_override_rejected():
+    from scripts.duplicate_guard.matcher import extract_canonical_reference
+
+    i10 = make_raw(10, "[Nova extensão]: SecSite", "### Tipo de extensão\nMangá\n### Nome da fonte\nSecSite\n### URL do site\nhttps://secsite.com\n", labels=["Nova extensão", "Mangá"], created_at="2026-11-01T10:00:00Z")
+    i11 = make_raw(11, "[Nova extensão]: SecSite", "### Tipo de extensão\nMangá\n### Nome da fonte\nSecSite\n### URL do site\nhttps://secsite.com\n", labels=["Nova extensão", "Mangá", "Em análise"], created_at="2026-11-02T10:00:00Z")
+    cfg = load_config(REPO_ROOT / ".github" / "duplicate-guard.json")
+    dec = evaluate_pair([i10, i11], 11, cfg)
+
+    # Malicious non-maintainer comments trying to spoof bot marker and ignore override
+    forged_comments = [
+        {
+            "id": 801,
+            "user": {"login": "attacker1", "type": "User"},
+            "author_association": "NONE",
+            "body": f"<!-- nox-duplicate-guard:v1 issue=11 decision=confirmed_duplicate canonical=10 action=auto_closed fp={dec.fingerprint} -->\n/not-duplicate\n<!-- nox-duplicate-guard:ignore -->",
+        },
+        {
+            "id": 802,
+            "user": {"login": "attacker2", "type": "User"},
+            "author_association": "CONTRIBUTOR",
+            "body": "/not-duplicate",
+        },
+        {
+            "id": 803,
+            "user": {"login": "attacker3", "type": "User"},
+            "body": "<!-- nox-duplicate-guard:ignore -->",
+        },
+    ]
+
+    # Chain reference extractor must ignore spoofed user comments
+    assert extract_canonical_reference(forged_comments) is None
+
+    api_spoof = InMemoryGitHubApi([i10, i11], initial_comments={11: forged_comments})
+    res_spoof = GuardActionExecutor(api_spoof, cfg, {10: i10, 11: i11}).apply(dec)
+    # Bot must NOT be tricked into ignoring, must NOT edit attacker's comment (801), and must close properly
+    assert res_spoof.action_taken == "auto_closed"
+    assert res_spoof.closed is True
+    assert res_spoof.comment_id not in (801, 802, 803)
+    assert api_spoof.comments[11][0]["body"].endswith("<!-- nox-duplicate-guard:ignore -->")
+    assert len(api_spoof.comments[11]) == 4
+
+    # Authorized maintainer comment (MEMBER/OWNER/COLLABORATOR) IS respected
+    maintainer_api = InMemoryGitHubApi([i10, i11], initial_comments={
+        11: [{
+            "id": 901,
+            "user": {"login": "Awerkori", "type": "User"},
+            "author_association": "OWNER",
+            "body": "/not-duplicate — fontes com API distinta",
+        }]
+    })
+    res_maint = GuardActionExecutor(maintainer_api, cfg, {10: i10, 11: i11}).apply(dec)
+    assert res_maint.action_taken == "skipped_manual_override"
+    assert maintainer_api.issues[11]["state"] == "open"
+
+    # Authorized maintainer label ('ignorar-duplicata') IS respected
+    i11_lbl = make_raw(11, i11.title, i11.body, labels=["Nova extensão", "Mangá", "ignorar-duplicata"], created_at="2026-11-02T10:00:00Z")
+    lbl_api = InMemoryGitHubApi([i10, i11_lbl])
+    res_lbl = GuardActionExecutor(lbl_api, cfg, {10: i10, 11: i11_lbl}).apply(dec)
+    assert res_lbl.action_taken == "skipped_manual_override"
+    assert lbl_api.issues[11]["state"] == "open"
+
+
+def test_30_historical_backfill_incremental_cache_and_precedence(tmp_path, monkeypatch, capsys):
+    # 1. Config precedence: JSON < Env < CLI, and auto_close_enabled independent of dry_run
+    cfg_json = load_config(REPO_ROOT / ".github" / "duplicate-guard.json")
+    assert cfg_json.auto_close_enabled is True
+    assert cfg_json.dry_run is False
+
+    monkeypatch.setenv("NOX_DUPLICATE_GUARD_AUTO_CLOSE", "false")
+    monkeypatch.setenv("NOX_DUPLICATE_GUARD_DRY_RUN", "false")
+    cfg_env = load_config(REPO_ROOT / ".github" / "duplicate-guard.json")
+    assert cfg_env.auto_close_enabled is False
+    assert cfg_env.dry_run is False
+
+    monkeypatch.delenv("NOX_DUPLICATE_GUARD_AUTO_CLOSE", raising=False)
+    monkeypatch.delenv("NOX_DUPLICATE_GUARD_DRY_RUN", raising=False)
+
+    # 2. Historical backfill (> 90 days old, outside 30-day window) + ambiguous kept open
+    old_orig = make_raw(
+        10, "[Nova extensão]: OldScan",
+        "### Tipo de extensão\nMangá\n### Nome da fonte\nOldScan\n### URL do site\nhttps://oldscan.com\n",
+        labels=["Nova extensão", "Mangá", "Em análise"],
+        created_at="2026-06-01T10:00:00Z",
+    )
+    old_dup = make_raw(
+        11, "[Nova extensão]: Old Scan",
+        "### Tipo de extensão\nMangá\n### Nome da fonte\nOld Scan\n### URL do site\nhttps://www.oldscan.com/\n",
+        labels=["Nova extensão", "Mangá", "Em análise"],
+        created_at="2026-06-02T10:00:00Z",
+    )
+    amb_dup = make_raw(
+        12, "[Nova extensão]: OldScan",
+        "### Tipo de extensão\nMangá\n### Nome da fonte\nOldScan\n### URL do site\nhttps://oldscan.org\n",
+        labels=["Nova extensão", "Mangá", "Em análise"],
+        created_at="2026-06-03T10:00:00Z",
+    )
+
+    api = InMemoryGitHubApi([old_orig, old_dup, amb_dup])
+    cache_file = tmp_path / "guard_cache.json"
+
+    # First run in reconcile mode auto-promotes to backfill because cache has no last_full_backfill_at
+    # With batch-size=2, processes #10 and #11, truncates before #12
+    rc1 = run_cli(
+        ["--mode", "reconcile", "--batch-size", "2", "--cache-file", str(cache_file)],
+        client_override=api,
+    )
+    assert rc1 == 0
+    out1 = json.loads(capsys.readouterr().out)
+    assert out1["effective_mode"] == "backfill"
+    assert out1["batch_truncated"] is True
+    assert api.issues[11]["state"] == "closed"
+    assert api.issues[11]["state_reason"] == "duplicate"
+    assert api.issues[10]["state"] == "open"
+
+    # Second run resumes from #12 (skipping #10 via cache; #11 now closed)
+    api.api_calls_made = 0
+    rc2 = run_cli(
+        ["--mode", "backfill", "--batch-size", "10", "--cache-file", str(cache_file)],
+        client_override=api,
+    )
+    assert rc2 == 0
+    out2 = json.loads(capsys.readouterr().out)
+    assert out2["batch_truncated"] is False
+    assert out2["skipped_cached_count"] >= 1
+    assert api.issues[12]["state"] == "open"
+    assert len(api.comments[12]) == 1
+
+    # Third run with no changes skips all remaining open issues without per-issue API writes
+    api.api_calls_made = 0
+    writes_before = len(api.writes)
+    rc3 = run_cli(
+        ["--mode", "backfill", "--cache-file", str(cache_file)],
+        client_override=api,
+    )
+    assert rc3 == 0
+    out3 = json.loads(capsys.readouterr().out)
+    assert out3["processed_via_api_count"] == 0
+    assert out3["skipped_cached_count"] == 2  # #10 and #12
+    assert len(api.writes) == writes_before
+    assert api.api_calls_made == 1  # Only the paginated list_issues call!
 
 
 def test_workflow_security_no_untrusted_interpolation():

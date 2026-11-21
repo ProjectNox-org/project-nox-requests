@@ -15,6 +15,8 @@ from .models import (
     CATEGORY_DOMAIN_CHANGE,
     CATEGORY_ENHANCEMENT,
     CATEGORY_NEW_EXTENSION,
+    TRUSTED_AUTHOR_ASSOCIATIONS,
+    TRUSTED_BOT_LOGINS,
     CandidateEvaluation,
     GuardConfig,
     GuardDecision,
@@ -78,10 +80,27 @@ def _days_between(ts_a: str | None, ts_b: str | None) -> float:
     return abs((dt_a - dt_b).total_seconds()) / 86400.0
 
 
+def _is_trusted_canonical_comment(entry: dict) -> bool:
+    user = entry.get("user")
+    if not isinstance(user, dict):
+        return False
+    login = str(user.get("login") or "").strip().lower()
+    user_type = str(user.get("type") or "").strip().lower()
+    if login in TRUSTED_BOT_LOGINS and (user_type == "bot" or login.endswith("[bot]")):
+        return True
+    assoc = str(entry.get("author_association") or "").strip().upper()
+    return bool(login) and user_type in ("", "user") and assoc in TRUSTED_AUTHOR_ASSOCIATIONS
+
+
 def extract_canonical_reference(comments: list[dict] | list[str]) -> int | None:
-    """Extract canonical issue number referenced in existing bot/human comments."""
+    """Extract canonical issue number referenced in trusted bot or maintainer comments."""
     for entry in comments:
-        body = entry.get("body", "") if isinstance(entry, dict) else str(entry or "")
+        if isinstance(entry, dict):
+            if not _is_trusted_canonical_comment(entry):
+                continue
+            body = str(entry.get("body") or "")
+        else:
+            body = str(entry or "")
         for pat in _CANONICAL_REF_PATTERNS:
             m = pat.search(body)
             if m:
