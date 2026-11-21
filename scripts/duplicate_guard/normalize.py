@@ -479,6 +479,12 @@ def extract_error_signatures(text: str) -> tuple[frozenset[str], frozenset[str]]
 def classify_dead_source_evidence(text: str) -> str:
     """Classify dead-source evidence as 'permanent', 'temporary', or 'unclear'."""
     norm = normalize_text(text, preserve_urls=False)
+    # Neutralize explicit negations like "nao fechou" / "nao encerrou" before scanning permanent shutdown cues
+    scrubbed = re.sub(
+        r"\bnao\s+(?:fechou|encerrou|acabou|morreu|faliu|expirou)\b",
+        " ",
+        norm,
+    )
     permanent_hits = sum(
         1 for pat in (
             r"\bencerramento\s+definitivo\b", r"\bencerrou\b", r"\bencerrad[ao]\b",
@@ -487,7 +493,7 @@ def classify_dead_source_evidence(text: str) -> str:
             r"\bdiscord\b.*\bconfirm", r"\banuncio\s+oficial\b", r"\bconfirmaram\b",
             r"\bfechou\b", r"\bfaliu\b", r"\bnao\s+existe\s+mais\b", r"\bsemanas?\b", r"\bmeses?\b",
         )
-        if re.search(pat, norm)
+        if re.search(pat, scrubbed)
     )
     temporary_hits = sum(
         1 for pat in (
@@ -544,12 +550,21 @@ _LANG_ALIASES: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("fr", re.compile(r"\b(?:frances|french|fr)\b", re.I)),
     ("it", re.compile(r"\b(?:italiano|italian|it)\b", re.I)),
     ("de", re.compile(r"\b(?:alemao|german|de)\b", re.I)),
+    ("ar", re.compile(r"\b(?:arabe|arabic|ar)\b", re.I)),
+    ("th", re.compile(r"\b(?:tailandes|thai|th)\b", re.I)),
+    ("vi", re.compile(r"\b(?:vietnamita|vietnamese|vi)\b", re.I)),
+    ("id", re.compile(r"\b(?:indonesio|indonesian|bahasa\s+indonesia|id)\b", re.I)),
+    ("pl", re.compile(r"\b(?:polones|polish|pl)\b", re.I)),
+    ("tr", re.compile(r"\b(?:turco|turkish|tr)\b", re.I)),
+    ("he", re.compile(r"\b(?:hebraico|hebrew|he|iw)\b", re.I)),
 )
 
 _LANG_TOKEN_WORD_RE = (
     r"(?:portugues(?:\s*\(?\s*brasil\s*\)?)?|pt-?br|ingles(?:es)?|english|en-?us|"
     r"espanhol|espanol|spanish|russo|russian|japones|japanese|coreano|korean|"
-    r"chines|chinese|frances|french|italiano|italian|alemao|german)"
+    r"chines|chinese|frances|french|italiano|italian|alemao|german|"
+    r"arabe|arabic|tailandes|thai|vietnamita|vietnamese|indonesio|indonesian|"
+    r"polones|polish|turco|turkish|hebraico|hebrew)"
 )
 
 _EXISTING_ONLY_LANG_PATTERNS: tuple[re.Pattern[str], ...] = (
@@ -594,7 +609,8 @@ _SYMPTOM_TOPIC_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("infinite_loading", re.compile(r"\b(?:carregamento\s+infinito|carregando\s+infinitamente|loop\s+infinito|nunca\s+carrega|nao\s+sai\s+do\s+carregando)\b", re.I)),
     ("site_redesign", re.compile(r"\b(?:reformulou|mudou\s+(?:o\s+)?site|mudou\s+(?:a\s+)?interface|mudou\s+(?:o\s+)?layout|novo\s+layout|nova\s+interface|estrutura\s+do\s+site)\b", re.I)),
     ("slow_download", re.compile(r"\b(?:lentidao|muito\s+lento|demora(?:ndo)?\s+(?:muito\s+)?(?:para|pra)?\s*baixar|download\s+lento)\b", re.I)),
-    ("auth_failure", re.compile(r"\b(?:erro\s+(?:de|no)\s+login|nao\s+consigo\s+(?:fazer\s+)?login|autenticar|sessao\s+expirada|senha\s+invalida)\b", re.I)),
+    ("download_fail", re.compile(r"\b(?:ao\s+baixar\s+(?:capitulos?|episodios?)|somente\s+ao\s+baixar|erro\s+(?:ao|no)\s+(?:baixar|download)|nao\s+baixa\s+(?:capitulos?|episodios?))\b", re.I)),
+    ("auth_failure", re.compile(r"\b(?:erro\s+(?:de|no)\s+login|fazer\s+login|no\s+login|nao\s+consigo\s+(?:fazer\s+)?login|autentic\w*|sessao\s+expirada|senha\s+invalida)\b", re.I)),
     ("cloudflare_block", re.compile(r"\b(?:cloudflare|turnstile|challenge|bloqueio|bloqueou\s+o\s+acesso)\b", re.I)),
 )
 
@@ -610,10 +626,24 @@ _NON_SUBSTANTIVE_NOTE_RE = re.compile(
 )
 
 
+_EMPTY_LANG_PLACEHOLDERS = frozenset({
+    "no response",
+    "na",
+    "n a",
+    "none",
+    "nenhum",
+    "nenhuma",
+    "nada",
+    "nao informado",
+    "unspecified",
+})
+
+
 def normalize_language_code(raw_lang: str, *, allow_short_iso: bool = False) -> frozenset[str]:
     """Normalize a declared or extracted language string to ISO-like lowercase codes."""
     text = normalize_text(raw_lang, preserve_urls=False)
-    if not text:
+    cleaned_check = re.sub(r"[^a-z0-9]+", " ", text).strip()
+    if not cleaned_check or cleaned_check in _EMPTY_LANG_PLACEHOLDERS:
         return frozenset()
     if re.search(r"\b(?:all|multi(?:lingue|idioma)?|varios|todas?|todos)\b", text):
         return frozenset({"all"})
@@ -623,11 +653,15 @@ def normalize_language_code(raw_lang: str, *, allow_short_iso: bool = False) -> 
             codes.add(code)
     if allow_short_iso:
         # Handle bare catalog ISO codes such as 'en', 'pt-br', 'es-419', 'vi', 'th', etc.
-        primary = re.split(r"[-_]", text.strip())[0]
+        primary = re.split(r"[-_\s/]", text.strip())[0]
         if primary == "jp":
             primary = "ja"
         if re.fullmatch(r"[a-z]{2,3}", primary) and primary not in ("no", "nd"):
             codes.add(primary)
+    if not codes:
+        slug = compact_name(cleaned_check)[:24]
+        if slug:
+            return frozenset({f"unknown:{slug}"})
     return frozenset(codes)
 
 
@@ -724,7 +758,7 @@ def extract_specific_work_hint(title_symptom: str, description: str) -> str:
     """Extract a specific manga/anime title hint when issue scopes the problem to one work."""
     combined = normalize_text(f"{title_symptom} {description}", preserve_urls=False)
     patterns = (
-        re.compile(r"\b(?:apenas|so|somente)\s+(?:na|no|em)\s+(?:obra|manga|anime)\s+([a-z0-9][a-z0-9\s-]{2,32}?)(?:\s+(?:da|de|esta|nao|capitulo|erro)|$)"),
+        re.compile(r"\b(?:apenas|so|somente)\s+(?:na|no|em)\s+(?:obra|manga|anime)\s+([a-z0-9][a-z0-9\s-]{2,32}?)(?:\s+(?:da|de|do|dos|das|esta|estao|nao|capitulo|capitulos|erro|aparece|acontece|apresenta|retorna|falha|carrega|no|na|para|ao)|$)"),
         re.compile(r"\b(?:manga|anime)\s+([a-z0-9][a-z0-9-]{2,28}(?:\s+[a-z0-9-]{2,18}){0,2})\s+(?:capitulos?\s+errados?|nao\s+carrega|trocad[oa])"),
     )
     for pat in patterns:

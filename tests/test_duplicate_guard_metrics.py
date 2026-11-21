@@ -132,10 +132,28 @@ def build_labeled_cases():
             True, True,
         ),
         (
-            "bug_pos_http404_argos", "bug",
+            "bug_neg_http404_generic_argos_possible_only", "bug",
             real[146],
             _mk(2005, "[Problema na extensão]: Argos Comics — Erro 404 nos capítulos", "### Tipo de extensão\nMangá\n### Nome da extensão\nArgos Comics\n### Versão da extensão\n1.6.65\n### Aplicativo utilizado\nMihon\n### Parte afetada\nOutro\n### O que está acontecendo?\nAo tentar olhar capítulos de qualquer obra ocorre erro HTTP 404.\n", ["Problema na extensão", "Mangá"], created_at="2026-11-12T10:00:00Z"),
+            False, True,
+        ),
+        (
+            "bug_pos_sushi_specific_no_pages", "bug",
+            _mk(304, "[Problema na extensão]: Sushi Manga — Erro No pages found no capítulo 12", "### Tipo de extensão\nMangá\n### Nome da extensão\nSushi Manga\n### Versão da extensão\n1.4.2\n### Aplicativo utilizado\nMihon\n### Parte afetada\nLeitor / Imagens\n### O que está acontecendo?\nErro No pages found no capítulo 12 da obra ABC no leitor.\n", ["Problema na extensão", "Mangá"], created_at="2026-11-10T10:00:00Z"),
+            _mk(305, "[Problema na extensão]: Sushi Manga — No pages found capítulo 12 obra ABC", "### Tipo de extensão\nMangá\n### Nome da extensão\nSushi Manga\n### Versão da extensão\n1.4.2\n### Aplicativo utilizado\nMihon\n### Parte afetada\nLeitor / Imagens\n### O que está acontecendo?\nAo abrir o capítulo 12 da obra ABC aparece No pages found.\n", ["Problema na extensão", "Mangá"], created_at="2026-11-11T10:00:00Z"),
             True, True,
+        ),
+        (
+            "bug_neg_sushi_403_reader_vs_login", "bug",
+            _mk(300, "[Problema na extensão]: Sushi Manga — HTTP 403 no leitor", "### Tipo de extensão\nMangá\n### Nome da extensão\nSushi Manga\n### Parte afetada\nOutro\n### O que está acontecendo?\nExtensão Sushi Manga apresenta HTTP 403 quando abre o leitor.\n", ["Problema na extensão", "Mangá"], created_at="2026-11-10T10:00:00Z"),
+            _mk(301, "[Problema na extensão]: Sushi Manga — HTTP 403 no login", "### Tipo de extensão\nMangá\n### Nome da extensão\nSushi Manga\n### Parte afetada\nOutro\n### O que está acontecendo?\nExtensão Sushi Manga apresenta HTTP 403 quando tenta fazer login.\n", ["Problema na extensão", "Mangá"], created_at="2026-11-11T10:00:00Z"),
+            False, False,
+        ),
+        (
+            "bug_neg_sushi_generic_http400_possible_only", "bug",
+            _mk(302, "[Problema na extensão]: Sushi Manga — HTTP 400", "### Tipo de extensão\nMangá\n### Nome da extensão\nSushi Manga\n### O que está acontecendo?\nSushi Manga não está funcionando. Aparece HTTP 400.\n", ["Problema na extensão", "Mangá"], created_at="2026-11-10T10:00:00Z"),
+            _mk(303, "[Problema na extensão]: Sushi Manga — Erro HTTP 400", "### Tipo de extensão\nMangá\n### Nome da extensão\nSushi Manga\n### O que está acontecendo?\nSushi Manga não funciona. Erro HTTP 400.\n", ["Problema na extensão", "Mangá"], created_at="2026-11-11T10:00:00Z"),
+            False, True,
         ),
         (
             "bug_neg_login_vs_reader", "bug",

@@ -43,7 +43,10 @@ from .normalize import (
     name_without_tld,
     normalize_text,
     overlap_coefficient,
+    parse_version,
+    strip_accents,
     tfidf_cosine,
+    tokenize,
     tokenize_list,
 )
 
@@ -210,11 +213,221 @@ _GENERIC_BUG_SIGNATURES = frozenset({
 })
 
 _SYMPTOM_INCOMPATIBLE_PAIRS: tuple[tuple[frozenset[str], frozenset[str]], ...] = (
-    (frozenset({"wrong_chapters", "chapter_order"}), frozenset({"no_pages_or_empty", "missing_content", "slow_download", "auth_failure"})),
-    (frozenset({"vip_paywall"}), frozenset({"cloudflare_block", "no_pages_or_empty", "slow_download", "auth_failure"})),
-    (frozenset({"audio_subtitle"}), frozenset({"no_pages_or_empty", "wrong_chapters", "slow_download", "auth_failure"})),
+    (frozenset({"wrong_chapters", "chapter_order"}), frozenset({"no_pages_or_empty", "missing_content", "slow_download", "download_fail", "auth_failure", "login_auth"})),
+    (frozenset({"vip_paywall"}), frozenset({"cloudflare_block", "no_pages_or_empty", "slow_download", "download_fail", "auth_failure", "login_auth"})),
+    (frozenset({"audio_subtitle"}), frozenset({"no_pages_or_empty", "wrong_chapters", "slow_download", "download_fail", "auth_failure", "login_auth"})),
     (frozenset({"site_redesign"}), frozenset({"slow_download", "vip_paywall"})),
+    (frozenset({"auth_failure", "login_auth"}), frozenset({"no_pages_or_empty", "missing_content", "wrong_chapters", "download_fail", "slow_download", "audio_subtitle"})),
+    (frozenset({"download_fail", "slow_download"}), frozenset({"no_pages_or_empty", "wrong_chapters", "auth_failure", "login_auth"})),
 )
+
+_STRONG_SPECIFIC_BUG_SIGNATURES = frozenset({
+    "no_pages_found",
+    "no_results_found",
+    "nxdomain_dns",
+    "json_decode",
+    "null_pointer",
+    "missing_chapters",
+    "video_playback",
+})
+
+_GENERIC_BUG_STOPWORDS = frozenset({
+    "extensao", "extensoes", "extension", "fonte", "fontes", "source",
+    "manga", "mangas", "anime", "animes", "site", "sites", "app", "aplicativo",
+    "erro", "erros", "error", "errors", "problema", "problemas", "bug", "bugs",
+    "falha", "falhas", "funciona", "funcionando", "funcionar", "pega", "pegando",
+    "abre", "abrir", "abri", "abrindo", "carrega", "carregar", "carregando",
+    "aparece", "aparecendo", "mostra", "mostrando", "dando", "deu", "parou",
+    "parando", "ficou", "fica", "ficando", "tenta", "tentando", "tentar", "tento",
+    "quando", "sempre", "toda", "vez", "jeito", "nenhum", "totalmente", "nada",
+    "coisa", "algo", "alguem", "aqui", "hoje", "agora", "ontem", "ultima",
+    "ultimo", "ultimos", "novo", "nova", "novos", "versao", "version",
+    "http", "https", "status", "code", "codigo", "mensagem", "arquivo", "arquivos",
+    "imagem", "imagens", "screenshot", "print", "qualquer", "alguma", "algum",
+    "alguns", "algumas", "todas", "todos", "outro", "outra", "outros",
+    "acesso", "acessar", "cloudflare", "timeout", "timed", "out", "tempo",
+    "esgotado", "bloqueio", "bloqueou", "bloqueado", "webview",
+    "mihon", "aniyomi", "komikku", "suwayomi", "reikai", "tadami", "anizen",
+    "kotatsu", "tachiyomi", "400", "401", "403", "404", "410", "429",
+    "500", "502", "503", "504", "520", "521", "522", "523", "525", "526",
+})
+
+_PART_LABEL_WORDS = frozenset({
+    "leitor", "capitulo", "capitulos", "pagina", "paginas", "login", "conta",
+    "busca", "pesquisa", "filtro", "filtros", "catalogo", "popular", "recentes",
+    "video", "episodio", "episodios", "instalacao", "atualizacao", "detalhes",
+    "metadados",
+})
+
+_SIMPLE_PLURAL_FOLD = {
+    "capitulos": "capitulo",
+    "paginas": "pagina",
+    "episodios": "episodio",
+    "imagens": "imagem",
+    "obras": "obra",
+    "erros": "erro",
+    "filtros": "filtro",
+}
+
+
+def _specific_bug_evidence_tokens(issue: ParsedIssue, *, include_part_words: bool = True) -> frozenset[str]:
+    """Return informative non-generic tokens excluding extension name, domain, and generic bug boilerplate."""
+    text = f"{issue.title_symptom if hasattr(issue, 'title_symptom') else issue.clean_title} {issue.description} {issue.reproduction} {issue.additional_info}"
+    raw_tokens = tokenize(text)
+    exclude = set(_GENERIC_BUG_STOPWORDS)
+    exclude.update(tokenize(issue.name))
+    if issue.url and issue.url.host:
+        exclude.update(re.findall(r"[a-z0-9]+", issue.url.host.lower()))
+    if not include_part_words:
+        exclude.update(_PART_LABEL_WORDS)
+    cleaned: set[str] = set()
+    for tok in raw_tokens:
+        folded = _SIMPLE_PLURAL_FOLD.get(tok, tok)
+        if folded not in exclude and tok not in exclude:
+            cleaned.add(folded)
+    return frozenset(cleaned)
+
+
+_COMMENT_DENIAL_RE = re.compile(
+    r"\b(?:"
+    r"nao\s+e\s+(?:o\s+mesmo|duplicad[oa]|igual|mesma\s+coisa|esse\s+erro)|"
+    r"nao\s+(?:trata|se\s+trata)\s+d[oa]\s+mesm[oa]|"
+    r"nao\s+tem\s+(?:relacao|a\s+ver)|"
+    r"(?:outro|outra)\s+(?:problema|erro|solicitacao|extensao|caso)|"
+    r"(?:problema|erro|motivo|caso|sintoma)\s+diferente|"
+    r"diferente\s+d[oa]\s+(?:issue|ticket|#?\d+)"
+    r")\b",
+    re.IGNORECASE,
+)
+
+_EXCLUSIVITY_CUE_RE = re.compile(
+    r"\b(?:somente|apenas|so|exclusivamente)\s+(?:no|na|ao|para|em)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_verifiable_author_or_maintainer_comment(comment: dict, issue_author: str) -> bool:
+    if not isinstance(comment, dict):
+        return False
+    user = comment.get("user")
+    if not isinstance(user, dict):
+        return False
+    login = str(user.get("login") or "").strip()
+    login_lower = login.lower()
+    user_type = str(user.get("type") or "").strip().lower()
+    if not login or user_type == "bot" or login_lower.endswith("[bot]") or login_lower in TRUSTED_BOT_LOGINS:
+        return False
+    if user_type and user_type != "user":
+        return False
+    assoc = str(comment.get("author_association") or "").strip().upper()
+    if assoc in TRUSTED_AUTHOR_ASSOCIATIONS:
+        return True
+    author_lower = (issue_author or "").strip().lower()
+    if author_lower and author_lower not in ("unknown", "ghost", "deleted", "anonymous"):
+        return login_lower == author_lower
+    return False
+
+
+def evaluate_comment_clarifications(
+    target: ParsedIssue,
+    canonical: ParsedIssue | None,
+    comments: list[dict],
+    *,
+    catalog_ext_summary: dict | None = None,
+    match_kind: str = "duplicate",
+) -> tuple[bool, str | None]:
+    """Check verifiable author/maintainer comments ONLY to block or downgrade unsafe auto-closes.
+
+    Security & asymmetry rule (Sec 8):
+    - Only accepts comments from the verified issue author or repo maintainers (OWNER/MEMBER/COLLABORATOR).
+    - Ignores bot comments and untrusted third-party user comments.
+    - Comment text NEVER promotes a weak match to confirmed_duplicate; it only blocks/downgrades.
+    """
+    from .normalize import (
+        detect_extension_already_exists,
+        detect_regression_signal,
+        extract_error_signatures,
+        extract_feature_and_symptom_topics,
+        extract_language_context,
+        extract_specific_work_hint,
+        extract_urls_from_text,
+    )
+    from .parser import _infer_parts_from_free_text
+
+    qualifying_bodies: list[str] = []
+    for c in comments:
+        if _is_verifiable_author_or_maintainer_comment(c, target.raw.author):
+            body = str(c.get("body") or "").strip()
+            if body:
+                qualifying_bodies.append(body)
+    if not qualifying_bodies:
+        return False, None
+
+    combined_comments = "\n".join(qualifying_bodies)
+    norm_comments = normalize_text(combined_comments, preserve_urls=False)
+    if _COMMENT_DENIAL_RE.search(strip_accents(combined_comments).lower()):
+        return True, "author_or_maintainer_denied_duplication_in_comment"
+
+    if detect_regression_signal(combined_comments):
+        return True, "regression_clarification_in_comment"
+
+    extra_parts = frozenset(_infer_parts_from_free_text(combined_comments))
+    extra_sigs, _ = extract_error_signatures(combined_comments)
+    extra_feats, extra_symps = extract_feature_and_symptom_topics(combined_comments)
+    _, _, extra_langs, extra_existing_only = extract_language_context("", combined_comments)
+    extra_exists = detect_extension_already_exists(combined_comments)
+    extra_work = extract_specific_work_hint("", combined_comments)
+    extra_urls = extract_urls_from_text(combined_comments)
+    ver_m = re.search(r"\bvers(?:ao|ion)\s+v?(\d+(?:\.\d+)+)\b", norm_comments)
+    comment_ver = parse_version(ver_m.group(1)) if ver_m else ()
+
+    if canonical is not None:
+        if extra_parts:
+            rel = _parts_status(extra_parts, canonical.affected_parts)
+            if rel == "contradictory":
+                return True, "contradictory_affected_part_in_comment"
+            if _EXCLUSIVITY_CUE_RE.search(norm_comments) and (extra_parts - canonical.affected_parts):
+                return True, "exclusive_affected_part_clarification_in_comment"
+        if extra_symps and canonical.symptom_topics:
+            for g1, g2 in _SYMPTOM_INCOMPATIBLE_PAIRS:
+                if ((extra_symps & g1) and (canonical.symptom_topics & g2)) or (
+                    (canonical.symptom_topics & g1) and (extra_symps & g2)
+                ):
+                    return True, "contradictory_symptom_in_comment"
+        if extra_sigs and _signatures_contradict(target.error_signatures | extra_sigs, canonical.error_signatures):
+            return True, "contradictory_error_signature_in_comment"
+        if comment_ver and canonical.version_tuple and comment_ver != canonical.version_tuple:
+            return True, "version_mismatch_in_comment"
+        if extra_work and (not canonical.specific_work_hint or levenshtein_ratio(extra_work.replace(" ", ""), canonical.specific_work_hint.replace(" ", "")) < 0.72):
+            return True, "specific_work_clarification_in_comment"
+        if extra_langs and target.category in (CATEGORY_NEW_EXTENSION, CATEGORY_ENHANCEMENT):
+            c_langs = canonical.target_languages - {"all"}
+            e_langs = extra_langs - {"all"}
+            if e_langs and c_langs and not (e_langs & c_langs):
+                return True, "language_divergence_in_comment"
+        if extra_existing_only and extra_existing_only != canonical.existing_only_languages:
+            return True, "existing_language_divergence_in_comment"
+        if target.category == CATEGORY_NEW_EXTENSION and (extra_exists or (extra_feats - {"nsfw_adult"})):
+            return True, "intent_divergence_in_comment"
+        if extra_feats and canonical.feature_topics and target.category == CATEGORY_ENHANCEMENT:
+            if not ((extra_feats - {"nsfw_adult"}) <= (canonical.feature_topics - {"nsfw_adult"})):
+                return True, "feature_divergence_in_comment"
+        if extra_urls and target.category in (CATEGORY_NEW_EXTENSION, CATEGORY_DOMAIN_CHANGE):
+            canon_keys = {u.identity_key for u in (canonical.url, canonical.new_url) if u and u.is_valid_domain}
+            extra_keys = {u.identity_key for u in extra_urls if u.is_valid_domain}
+            if canon_keys and extra_keys and not (extra_keys <= canon_keys):
+                return True, "domain_divergence_in_comment"
+    elif match_kind == "already_fulfilled_creation":
+        if extra_exists or (extra_feats - {"nsfw_adult"}):
+            return True, "intent_divergence_in_comment"
+        if extra_langs and catalog_ext_summary:
+            cat_langs = set(catalog_ext_summary.get("languages") or [])
+            if "all" not in cat_langs and not (extra_langs <= cat_langs):
+                return True, "unsupported_language_in_comment"
+        if _EXCLUSIVITY_CUE_RE.search(norm_comments) or extra_symps or extra_sigs:
+            return True, "non_creation_scope_in_comment"
+
+    return False, None
 
 
 def _symptoms_contradict(target: ParsedIssue, cand: ParsedIssue) -> bool:
@@ -290,27 +503,59 @@ class DuplicateMatcher:
                 [self._tokens_cache[i.raw.number] for i in cat_issues]
             )
 
-    def resolve_canonical(self, candidate_num: int) -> int:
-        """Follow duplicate chains deterministically without cycles to a valid canonical issue."""
+    def resolve_canonical_with_status(self, candidate_num: int) -> tuple[int, bool]:
+        """Follow duplicate chains deterministically, reporting (resolved_number, cycle_detected)."""
         visited: set[int] = set()
         curr = candidate_num
         while curr not in visited:
             visited.add(curr)
             issue = self.by_number.get(curr)
             if not issue or not issue.is_duplicate_marked:
-                return curr
+                return curr, False
             linked = self.duplicate_links.get(curr)
-            if linked and linked not in visited and linked in self.by_number:
-                linked_issue = self.by_number[linked]
-                if _issue_order_key(linked_issue) < _issue_order_key(issue):
-                    curr = linked
-                    continue
-            # Fallback: find earliest non-duplicate issue in same category matching best
+            if linked is not None:
+                if linked in visited:
+                    return curr, True
+                if linked in self.by_number:
+                    linked_issue = self.by_number[linked]
+                    if _issue_order_key(linked_issue) < _issue_order_key(issue):
+                        curr = linked
+                        continue
+                # Explicit link points to deleted/404/inaccessible canonical: stop conservatively
+                return curr, True
             fallback = self._find_fallback_canonical(issue, visited)
             if fallback is not None:
-                return fallback
-            return curr
-        return candidate_num
+                return fallback, False
+            return curr, False
+        return candidate_num, True
+
+    def resolve_canonical(self, candidate_num: int) -> int:
+        """Follow duplicate chains deterministically without cycles to a valid canonical issue."""
+        resolved, _ = self.resolve_canonical_with_status(candidate_num)
+        return resolved
+
+    def reindex_issue(self, updated: ParsedIssue) -> None:
+        """Update in-memory matcher indexes when a live issue or canonical is edited mid-run."""
+        num = updated.raw.number
+        old = self.by_number.get(num)
+        self.by_number[num] = updated
+        if old is not None and old.category != updated.category:
+            old_list = self.by_category.get(old.category, [])
+            self.by_category[old.category] = [i for i in old_list if i.raw.number != num]
+        cat_list = self.by_category.setdefault(updated.category, [])
+        replaced = False
+        for idx, item in enumerate(cat_list):
+            if item.raw.number == num:
+                cat_list[idx] = updated
+                replaced = True
+                break
+        if not replaced:
+            cat_list.append(updated)
+        cat_list.sort(key=_issue_order_key)
+        self._tokens_cache[num] = _combined_text_tokens(updated)
+        self._idf_by_category[updated.category] = build_corpus_idf(
+            [self._tokens_cache[i.raw.number] for i in cat_list]
+        )
 
     def _find_fallback_canonical(self, dup_issue: ParsedIssue, visited: set[int]) -> int | None:
         best_eval: CandidateEvaluation | None = None
@@ -341,7 +586,7 @@ class DuplicateMatcher:
         for mid in self.by_category.get(CATEGORY_BUG, ()):
             if mid.raw.number in (target.raw.number, cand.raw.number):
                 continue
-            if not (mid.is_closed and mid.resolution == "done"):
+            if not (mid.is_closed and mid.resolution == "done" and not mid.is_duplicate_marked):
                 continue
             if _issue_order_key(mid) <= cand_key:
                 continue
@@ -597,6 +842,7 @@ class DuplicateMatcher:
             canonical_obj
             and canonical_obj.is_open
             and not canonical_obj.is_duplicate_marked
+            and not canonical_obj.resolution
             and _issue_order_key(canonical_obj) < target_key
         )
 
@@ -669,18 +915,27 @@ class DuplicateMatcher:
         else:
             classification, score, reasons, contradictions = res
 
-        canonical_num = self.resolve_canonical(cand.raw.number) if resolve_chain else cand.raw.number
+        cycle_or_missing_canon = False
+        if resolve_chain:
+            canonical_num, cycle_or_missing_canon = self.resolve_canonical_with_status(cand.raw.number)
+        else:
+            canonical_num = cand.raw.number
         canon_obj = self.by_number.get(canonical_num, cand)
 
         # If target points back to itself or canonical is somehow newer, reject safely
         if canonical_num == target.raw.number or _issue_order_key(canon_obj) >= _issue_order_key(target):
             return None
 
-        # Never auto-close when canonical resolved to a declined/cancelled/closed issue
-        if classification == "confirmed_duplicate" and (not canon_obj.is_open or canon_obj.resolution in ("declined", "cancelled", "done")):
+        # Never auto-close when chain contains a cycle, missing canonical (404), or closed/resolved canonical
+        if classification == "confirmed_duplicate" and (
+            cycle_or_missing_canon
+            or canon_obj.is_duplicate_marked
+            or not canon_obj.is_open
+            or canon_obj.resolution in ("declined", "cancelled", "done", "duplicate")
+        ):
             classification = "possible_duplicate"
             match_kind = "historical_related"
-            reasons = (*reasons, "O ticket original encontra-se encerrado; marcada revisão humana.")
+            reasons = (*reasons, "O ticket original encontra-se encerrado, inválido ou em ciclo; marcada revisão humana.")
 
         return CandidateEvaluation(
             candidate_number=cand.raw.number,
@@ -846,7 +1101,7 @@ class DuplicateMatcher:
         if _signatures_contradict(target.error_signatures, cand.error_signatures):
             return None
 
-        if parts_rel == "contradictory" and not shared_tech:
+        if parts_rel == "contradictory":
             return None
 
         # Regression and recurrent incident protection against closed or previously resolved bugs
@@ -914,8 +1169,20 @@ class DuplicateMatcher:
                 )
             return None
 
+        # Explicit regression cue in target text -> never auto-close as duplicate of an older ticket
+        if target.has_regression_signal:
+            if parts_rel in ("same", "adjacent") and (shared_sigs or text_sim >= 0.45):
+                return (
+                    "possible_duplicate",
+                    round(min(0.70, text_sim + 0.15), 3),
+                    ("Relato indica possível regressão/recorrência após funcionamento anterior; preservado aberto para análise.",),
+                    ("regression_signal",),
+                    "regression_check",
+                )
+            return None
+
         # Distinct specific symptom topics or specific works NEVER auto-close
-        if symptoms_conflict:
+        if symptoms_conflict or (bool(target.specific_work_hint) != bool(cand.specific_work_hint)):
             if parts_rel == "same" and text_sim >= 0.45:
                 return (
                     "possible_duplicate",
@@ -926,46 +1193,88 @@ class DuplicateMatcher:
                 )
             return None
 
-        # Open candidate: check confirmed criteria for the CURRENT incident
-        has_defined_part_overlap = parts_rel in ("same", "adjacent")
-        both_have_specific_sig = bool(
-            shared_sigs & {"no_pages_found", "no_results_found", "nxdomain_dns", "json_decode", "null_pointer"}
-        )
+        # Explicit version mismatch or distant recurring incidents NEVER auto-close (Scenario D)
+        version_mismatch = bool(target.version_tuple and cand.version_tuple and target.version_tuple != cand.version_tuple)
+        days_apart = _days_between(target.raw.created_at, cand.raw.created_at)
+        if version_mismatch:
+            return (
+                "possible_duplicate",
+                round(min(0.76, max(0.55, text_sim + 0.2)), 3),
+                (f"Mesma extensão ({target.name}) com sintomas semelhantes, porém em versões distintas da extensão ({cand.version_raw} vs {target.version_raw}); preservado aberto para verificar regressão.",),
+                ("version_mismatch",),
+                "regression_check",
+            )
+        if days_apart > 30.0:
+            return (
+                "possible_duplicate",
+                round(min(0.75, max(0.52, text_sim + 0.18)), 3),
+                (f"Mesma extensão ({target.name}) com sintoma semelhante em data distante ({int(days_apart)} dias de diferença); preservado aberto para verificar recorrência.",),
+                ("distant_dates_recurrence",),
+                "regression_check",
+            )
 
-        # Path 1: Nearly identical description + compatible parts + no symptom contradiction
-        if parts_rel in ("same", "adjacent", "neutral") and text_sim >= th.bug_confirmed_text_similarity:
+        # Positive specific equivalence requirements for confirmed_duplicate in bugs (Sec 4 & 5):
+        # Absence of contradiction or generic HTTP/Cloudflare similarity NEVER suffices for auto-close.
+        shared_specific_loose = _specific_bug_evidence_tokens(target, include_part_words=True) & _specific_bug_evidence_tokens(cand, include_part_words=True)
+        shared_specific_strict = _specific_bug_evidence_tokens(target, include_part_words=False) & _specific_bug_evidence_tokens(cand, include_part_words=False)
+        strong_specific_sigs = shared_sigs & _STRONG_SPECIFIC_BUG_SIGNATURES
+        has_specific_tech_evidence = bool(strong_specific_sigs or shared_tech)
+
+        desc_len_t = len(normalize_text(f"{target.clean_title} {target.description}", preserve_urls=False))
+        desc_len_c = len(normalize_text(f"{cand.clean_title} {cand.description}", preserve_urls=False))
+
+        # Tier 1: Strong specific technical signature (e.g. No pages found, NXDOMAIN, JsonDecodingException) or stack/host token
+        if has_specific_tech_evidence and (parts_rel in ("same", "adjacent") or bool(shared_tech)):
+            if (len(shared_specific_loose) >= 2 or bool(shared_tech)) and (
+                text_sim >= th.bug_confirmed_structured_text_similarity
+                or bool(shared_tech)
+                or "no_pages_found" in strong_specific_sigs
+                or "nxdomain_dns" in strong_specific_sigs
+            ):
+                sigs_str = ", ".join(sorted(shared_sigs or shared_tech))
+                return (
+                    "confirmed_duplicate",
+                    round(min(0.98, max(0.88, text_sim + 0.35)), 3),
+                    (
+                        f"Mesma extensão ({target.name}), parte afetada compatível e evidência técnica específica equivalente no mesmo incidente ({sigs_str}).",
+                    ),
+                    (),
+                    "duplicate",
+                )
+
+        # Tier 2: Descriptive-only or generic HTTP/Cloudflare bug requires concrete matching part, tight window, and rich shared specifics
+        rich_descriptive_match = (
+            (text_sim >= th.bug_confirmed_text_similarity and len(shared_specific_strict) >= 4)
+            or (days_apart <= 7.0 and text_sim >= 0.65 and len(shared_specific_strict) >= 5)
+        )
+        if (
+            not has_specific_tech_evidence
+            and parts_rel == "same"
+            and days_apart <= 14.0
+            and desc_len_t >= 40
+            and desc_len_c >= 40
+            and rich_descriptive_match
+        ):
             return (
                 "confirmed_duplicate",
-                round(min(0.99, text_sim + 0.1), 3),
+                round(min(0.96, text_sim + 0.08), 3),
                 (
-                    f"Mesma extensão ({target.name}), parte afetada compatível, mesmo incidente em aberto e descrição equivalente do defeito.",
+                    f"Mesma extensão ({target.name}), mesma parte afetada e detalhes técnicos específicos equivalentes no mesmo incidente.",
                 ),
                 (),
                 "duplicate",
             )
 
-        # Path 2: Specific structured error evidence + compatible/adjacent affected part
-        if shared_sigs and (has_defined_part_overlap or (parts_rel == "neutral" and both_have_specific_sig)):
-            only_generic_sig = shared_sigs <= _GENERIC_BUG_SIGNATURES
-            if not only_generic_sig or (parts_rel == "same" and text_sim >= th.bug_confirmed_structured_text_similarity):
-                if (
-                    text_sim >= th.bug_confirmed_structured_text_similarity
-                    or shared_tech
-                    or ("no_pages_found" in shared_sigs and parts_rel in ("same", "adjacent"))
-                    or ("nxdomain_dns" in shared_sigs)
-                ):
-                    sigs_str = ", ".join(sorted(shared_sigs))
-                    return (
-                        "confirmed_duplicate",
-                        round(min(0.97, max(0.86, text_sim + 0.35)), 3),
-                        (
-                            f"Mesma extensão ({target.name}), parte afetada compatível e evidência de erro idêntica no mesmo incidente ({sigs_str}).",
-                        ),
-                        (),
-                        "duplicate",
-                    )
-
-        # Possible duplicate alerts (human review only)
+        # Possible duplicate alerts (human review only — includes generic HTTP errors and high similarity without specifics)
+        if shared_sigs <= _GENERIC_BUG_SIGNATURES and shared_sigs and parts_rel != "contradictory" and text_sim >= th.bug_possible_same_part_similarity:
+            sigs_str = ", ".join(sorted(shared_sigs))
+            return (
+                "possible_duplicate",
+                round(min(0.78, max(0.56, text_sim + 0.20)), 3),
+                (f"Mesma extensão ({target.name}) com erro genérico semelhante ({sigs_str}), sem evidência específica suficiente para encerramento automático.",),
+                ("generic_error_requires_review",),
+                "ambiguous_same_source",
+            )
         if parts_rel == "same" and text_sim >= th.bug_possible_same_part_similarity:
             return (
                 "possible_duplicate",
@@ -1164,9 +1473,10 @@ class DuplicateMatcher:
                 "duplicate",
             )
 
-        if cand.is_open and (
-            (cos_sim >= th.enhancement_possible_tfidf_similarity or combined >= 0.48)
-            and tok_overlap >= th.enhancement_possible_token_overlap
+        if cand.is_open and tok_overlap >= th.enhancement_possible_token_overlap and (
+            cos_sim >= th.enhancement_possible_tfidf_similarity
+            or combined >= 0.48
+            or bool(feat_t & feat_c)
         ):
             return (
                 "possible_duplicate",

@@ -18,9 +18,7 @@ from .config import DEFAULT_CONFIG_PATH, load_config
 from .github_client import GitHubApiError, GitHubClient, PermissionDeniedError, RateLimitError
 from .matcher import DuplicateMatcher, extract_canonical_reference
 from .models import (
-    INCOMPATIBLE_STATUS_LABELS_ON_DUPLICATE,
     LABEL_DUPLICATE,
-    OFFICIAL_RESOLUTION_LABELS,
     RULE_ENGINE_VERSION,
     ExtensionCatalog,
     GuardConfig,
@@ -62,18 +60,6 @@ def _collect_known_extensions(raw_issues: list[RawIssue]) -> frozenset[str]:
         if parsed.related_extension_compact and len(parsed.related_extension_compact) >= 4:
             known.add(parsed.related_extension_compact)
     return frozenset(known)
-
-
-def _needs_closed_duplicate_label_cleanup(p: ParsedIssue) -> bool:
-    if not p.is_closed:
-        return False
-    is_dup_closed = (p.raw.state_reason == "duplicate") or (LABEL_DUPLICATE in p.raw.labels)
-    if not is_dup_closed:
-        return False
-    has_any_resolution = bool(set(p.raw.labels) & OFFICIAL_RESOLUTION_LABELS)
-    missing_dup = (not has_any_resolution) and (LABEL_DUPLICATE not in p.raw.labels)
-    has_stale_status = bool(set(p.raw.labels) & set(INCOMPATIBLE_STATUS_LABELS_ON_DUPLICATE))
-    return missing_dup or has_stale_status
 
 
 def load_extension_catalog(
@@ -450,15 +436,12 @@ def run_cli(argv: list[str] | None = None, *, client_override: object | None = N
             target_numbers.append(issue_num)
     elif effective_mode == "backfill":
         for p in sorted(parsed_list, key=lambda x: (_parse_iso(x.raw.created_at), x.raw.number)):
-            if p.is_open or _needs_closed_duplicate_label_cleanup(p):
+            if p.is_open:
                 target_numbers.append(p.raw.number)
     else:
         lookback = args.lookback_days if args.lookback_days is not None else config.reconcile_lookback_days
         cutoff = datetime.now(tz=timezone.utc) - timedelta(days=max(1, lookback))
         for p in sorted(parsed_list, key=lambda x: (_parse_iso(x.raw.created_at), x.raw.number)):
-            if _needs_closed_duplicate_label_cleanup(p):
-                target_numbers.append(p.raw.number)
-                continue
             if not p.is_open:
                 continue
             cached_entry = cache_state["evaluated"].get(str(p.raw.number))
@@ -470,7 +453,11 @@ def run_cli(argv: list[str] | None = None, *, client_override: object | None = N
                 target_numbers.append(p.raw.number)
 
     report_rows: list[dict] = []
-    executor = GuardActionExecutor(client, config, issues_by_num, repo=args.repo) if client is not None else None  # type: ignore[arg-type]
+    executor = (
+        GuardActionExecutor(client, config, issues_by_num, repo=args.repo, matcher=matcher)  # type: ignore[arg-type]
+        if client is not None
+        else None
+    )
 
     processed_api_batch = 0
     skipped_cached_count = 0
@@ -515,19 +502,23 @@ def run_cli(argv: list[str] | None = None, *, client_override: object | None = N
         if executor is not None:
             action_res = executor.apply(decision)
             processed_api_batch += 1
+            eff_cls = action_res.decision
+            eff_canon = action_res.canonical_issue
             action_taken = action_res.action_taken
             closed_flag = action_res.closed
             skipped_reason = action_res.skipped_reason
             partial_errors = list(action_res.partial_errors)
         else:
             processed_api_batch += 1
+            eff_cls = decision.classification
+            eff_canon = decision.canonical_issue
             action_taken = f"offline_{decision.classification}"
             closed_flag = False
             skipped_reason = decision.blocked_reason
             partial_errors = []
 
-        if (closed_flag or action_taken == "dry_run_auto_closed") and decision.canonical_issue is not None:
-            matcher.duplicate_links[num] = decision.canonical_issue
+        if (closed_flag or action_taken == "dry_run_auto_closed") and eff_canon is not None:
+            matcher.duplicate_links[num] = eff_canon
             old_raw = issues_by_num[num]
             new_labels = tuple(l for l in old_raw.labels if l not in ("Em análise", "Aguardando informações"))
             if LABEL_DUPLICATE not in new_labels:
@@ -553,13 +544,13 @@ def run_cli(argv: list[str] | None = None, *, client_override: object | None = N
         is_rate_limited = _is_rate_limit_failure(skipped_reason, partial_errors)
 
         if can_persist_cache and (not is_rate_limited) and action_taken in TERMINAL_CACHE_ACTIONS:
-            canon_state = issues_by_num[decision.canonical_issue].state if decision.canonical_issue in issues_by_num else None
+            canon_state = issues_by_num[eff_canon].state if eff_canon in issues_by_num else None
             cache_state["evaluated"][str(num)] = {
                 "updated_at": target_parsed.raw.updated_at,
                 "fingerprint": target_parsed.content_fingerprint,
                 "auto_close_enabled": config.auto_close_enabled,
-                "decision": decision.classification,
-                "canonical_issue": decision.canonical_issue,
+                "decision": eff_cls,
+                "canonical_issue": eff_canon,
                 "canonical_state": canon_state,
                 "action_taken": action_taken,
             }
@@ -568,9 +559,9 @@ def run_cli(argv: list[str] | None = None, *, client_override: object | None = N
         report_rows.append({
             "issue_number": num,
             "category": decision.category,
-            "classification": decision.classification,
-            "canonical_issue": decision.canonical_issue,
-            "should_auto_close": decision.should_auto_close,
+            "classification": eff_cls,
+            "canonical_issue": eff_canon,
+            "should_auto_close": closed_flag or (action_taken == "dry_run_auto_closed"),
             "reasons": list(decision.reasons),
             "candidates": [asdict(c) for c in decision.candidates],
             "action_taken": action_taken,

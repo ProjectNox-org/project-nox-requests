@@ -1592,7 +1592,7 @@ def test_37_duplicate_labels_lifecycle_and_workflow_conflict_protection(tmp_path
     assert len(api.writes) == writes_before
     assert len(api.comments[941]) == 1
 
-    # Closed duplicate left missing Duplicado & retaining Em análise gets sanitized safely via backfill
+    # Closed historical issues (e.g. #127 / #143 / #942) are NOT automatically mutated during normal backfill/reconcile
     broken_closed_dup = make_raw(
         942, "[Nova extensão]: BrokenClosedDup",
         "### Tipo de extensão\nAnime\n### Nome da fonte\nBrokenClosedDup\n### URL do site\nhttps://brokenclosed.tv/\n",
@@ -1600,11 +1600,17 @@ def test_37_duplicate_labels_lifecycle_and_workflow_conflict_protection(tmp_path
         state="closed", state_reason="duplicate",
         created_at="2026-11-03T10:00:00Z", closed_at="2026-11-04T10:00:00Z",
     )
-    api_clean = InMemoryGitHubApi([broken_closed_dup])
-    rc = run_cli(["--mode", "backfill", "--cache-file", str(tmp_path / "clean_cache.json")], client_override=api_clean)
+    api_hist = InMemoryGitHubApi([broken_closed_dup])
+    rc = run_cli(["--mode", "backfill", "--cache-file", str(tmp_path / "clean_cache.json")], client_override=api_hist)
     assert rc == 0
     _ = capsys.readouterr()
-    cleaned_lbls = {l["name"] for l in api_clean.issues[942]["labels"]}
+    assert {l["name"] for l in api_hist.issues[942]["labels"]} == {"Nova extensão", "Anime", "Em análise"}
+
+    # When explicitly invoked in single mode for a closed duplicate missing Duplicado, sanitation preserves non-status labels
+    rc_single = run_cli(["--mode", "single", "--issue-number", "942"], client_override=api_hist)
+    assert rc_single == 0
+    _ = capsys.readouterr()
+    cleaned_lbls = {l["name"] for l in api_hist.issues[942]["labels"]}
     assert cleaned_lbls == {"Nova extensão", "Anime", "Duplicado"}
     assert "Em análise" not in cleaned_lbls
     # Closed non-duplicate workflows remain valid YAML
