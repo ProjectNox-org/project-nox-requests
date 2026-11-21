@@ -196,4 +196,20 @@ Resultados observados após a correção:
     - `alert_or_close`: `tp=49`, **`fp=0`**, `fn=0`, `tn=49`, **`precision=1.0`**, **`recall=1.0`**.
     - `failures`: `[]`.
 - **Execuções de publicação e produção (`v1.7.1`):**
-  - Registradas logo após merge, `backfill`/`reconcile` protegidos, CodeQL e `reconcile` real pós-reativação.
+  - **PR de implementação da `v1.7.1`:** [PR #168](https://github.com/ProjectNox-org/project-nox-requests/pull/168) (`62dd444`) → merge em `main` no commit `5e8ce7fc7cb87760c13bdb0202e31696bb6cbb3a`.
+  - **Checks no PR #168 (todos aprovados — `4/4`):**
+    - CI (`Executar Testes das Automações` / `test`): [Job 136810157763](https://github.com/ProjectNox-org/project-nox-requests/actions/runs/44892162890/job/136810157763) — `success`.
+    - CodeQL (`Analyze (actions)`): [Job 136810155047](https://github.com/ProjectNox-org/project-nox-requests/actions/runs/44892160767/job/136810155047) — `success`.
+    - CodeQL (`Analyze (python)`): [Job 136810155158](https://github.com/ProjectNox-org/project-nox-requests/actions/runs/44892160767/job/136810155158) — `success`.
+    - CodeQL Check Run: [Run 136810286781](https://github.com/ProjectNox-org/project-nox-requests/runs/136810286781) — `success`.
+  - **Workflows de `push` em `main` após merge do PR #168 (com `NOX_DUPLICATE_GUARD_AUTO_CLOSE=false`):**
+    - CI (`Executar Testes das Automações`, [Run 44892293723](https://github.com/ProjectNox-org/project-nox-requests/actions/runs/44892293723)): `success`.
+    - CodeQL (`Push on main`, [Run 44892293635](https://github.com/ProjectNox-org/project-nox-requests/actions/runs/44892293635)): `success`.
+    - Duplicate Guard (`push` em `main`, [Run 44892293798](https://github.com/ProjectNox-org/project-nox-requests/actions/runs/44892293798)): `success` — `"effective_mode": "backfill"`, `"dry_run": false`, `"auto_close_enabled": false`, `"rule_version": "1.7.1"`, `"evaluated_count": 15`, `"skipped_cached_count": 0` (invalidação automática do cache `v1.7.0`), `"would_or_did_close": 0`, `"error_count": 0`.
+  - **Validações operacionais em produção na `main` (`v1.7.1`):**
+    - `backfill` em `dry_run=true` ([Run 44892403821](https://github.com/ProjectNox-org/project-nox-requests/actions/runs/44892403821)): `success` — `"effective_mode": "backfill"`, `"dry_run": true`, `"auto_close_enabled": false`, `"rule_version": "1.7.1"`, `"evaluated_count": 15`, `"skipped_cached_count": 0`, `"would_or_did_close": 0`, `"error_count": 0`.
+    - `reconcile` protegido (`auto_close_enabled=false`, [Run 44892460414](https://github.com/ProjectNox-org/project-nox-requests/actions/runs/44892460414)): `success` — `"effective_mode": "reconcile"`, `"dry_run": false`, `"auto_close_enabled": false`, `"rule_version": "1.7.1"`, `"evaluated_count": 15`, `"skipped_cached_count": 15` (cache hit), `"would_or_did_close": 0`, `"error_count": 0`.
+    - **Reativação controlada:** variável `NOX_DUPLICATE_GUARD_AUTO_CLOSE` removida via `gh variable delete`, restaurando `auto_close_enabled: true`.
+    - `reconcile` real #1 pós-reativação ([Run 44892517380](https://github.com/ProjectNox-org/project-nox-requests/actions/runs/44892517380)): `success` — `"effective_mode": "reconcile"`, `"dry_run": false`, `"auto_close_enabled": true`, `"rule_version": "1.7.1"`, `"evaluated_count": 15`, `"skipped_cached_count": 0` (reavaliação pela mudança de `auto_close_enabled`), `"would_or_did_close": 0`, `"error_count": 0`.
+    - `reconcile` real #2 com cache hit ([Run 44892563298](https://github.com/ProjectNox-org/project-nox-requests/actions/runs/44892563298)): `success` — `"effective_mode": "reconcile"`, `"dry_run": false`, `"auto_close_enabled": true`, `"rule_version": "1.7.1"`, `"evaluated_count": 15`, `"skipped_cached_count": 15`, `"would_or_did_close": 0`, `"error_count": 0`.
+  - **Integridade final:** `0` alertas abertos no CodeQL e todas as **15 Issues reais abertas** (`#123`, `#125`, `#128`, `#132`, `#134`, `#138`, `#139`, `#140`, `#144`, `#145`, `#146`, `#148`, `#150`, `#151`, `#156`) preservadas abertas com suas labels originais.
