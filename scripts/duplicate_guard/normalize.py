@@ -166,18 +166,18 @@ _HOMEPAGE_NAV_SEGMENTS = frozenset({
 
 
 def _compute_scope_path(norm_path: str) -> str:
-    """Fold strictly benign homepage navigation segments while preserving content/locale/section paths."""
+    """Fold strictly benign homepage navigation segments while preserving case-sensitive resource paths."""
     stripped = (norm_path or "/").strip("/")
-    if not stripped or stripped in _HOMEPAGE_NAV_SEGMENTS:
+    if not stripped or stripped.lower() in _HOMEPAGE_NAV_SEGMENTS:
         return "/"
     parts = stripped.split("/")
-    if len(parts) == 2 and _map_locale_label(parts[0]) and parts[1] in _HOMEPAGE_NAV_SEGMENTS:
+    if len(parts) == 2 and _map_locale_label(parts[0]) and parts[1].lower() in _HOMEPAGE_NAV_SEGMENTS:
         return f"/{parts[0]}"
     return norm_path
 
 
 def _normalize_functional_query(raw_query: str) -> str:
-    """Keep sorted non-volatile, non-secret query parameters (with secret-like values redacted)."""
+    """Keep sorted non-volatile, non-secret query parameters preserving functional key/value case."""
     if not raw_query:
         return ""
     kept: list[tuple[str, str]] = []
@@ -185,8 +185,9 @@ def _normalize_functional_query(raw_query: str) -> str:
         kl = strip_accents(k or "").strip().lower()
         if not kl or kl in _SENSITIVE_QUERY_KEYS or kl in _VOLATILE_QUERY_KEYS or kl.startswith("utm_"):
             continue
-        vl = "<redacted>" if _looks_like_secret_value(v) else strip_accents(v or "").strip().lower()
-        kept.append((kl, vl))
+        k_clean = (k or "").strip()
+        v_clean = "<redacted>" if _looks_like_secret_value(v) else (v or "").strip()
+        kept.append((k_clean, v_clean))
     if not kept:
         return ""
     kept.sort()
@@ -284,10 +285,10 @@ def normalize_url(raw_value: str) -> NormalizedUrl | None:
     is_shared = (reg_domain in SHARED_HOST_DOMAINS) or (exact_host in SHARED_HOST_DOMAINS) or (host in SHARED_HOST_DOMAINS)
     host_stem = reg_domain.split(".", 1)[0]
 
-    # Decode percent-encoding, normalize repeated slashes, lowercase path, and keep functional query params
+    # Decode percent-encoding, normalize repeated slashes, preserve path case, and keep functional query params
     raw_path = unquote(parsed.path or "/")
     raw_path = re.sub(r"[\x00-\x1f\x7f]+", "", raw_path)
-    path = re.sub(r"/+", "/", raw_path).strip("/").lower()
+    path = re.sub(r"/+", "/", raw_path).strip("/")
     norm_path = f"/{path}" if path else "/"
     scope_path = _compute_scope_path(norm_path)
     func_query = _normalize_functional_query(parsed.query or "")
@@ -337,7 +338,7 @@ def compare_source_urls(
     ext_type_b: str | None = None,
     allow_default_type_landing: bool = False,
 ) -> tuple[bool, str | None]:
-    """Compare two normalized URLs strictly using exact host, port, scope path, and functional query."""
+    """Compare two normalized URLs strictly using exact host, port, case-sensitive scope path, and functional query."""
     if not url_a or not url_b or not url_a.is_valid_domain or not url_b.is_valid_domain:
         return False, "missing_or_invalid_url"
     if url_a.identity_key != url_b.identity_key:
@@ -356,6 +357,8 @@ def compare_source_urls(
             and "manga" in url_a.host_stem
         ):
             return True, None
+        if url_a.scope_path.lower() == url_b.scope_path.lower():
+            return False, "path_case_divergence"
         return False, "path_divergence"
     return True, None
 
@@ -1228,11 +1231,12 @@ def _canonicalize_endpoint(raw_path_and_query: str) -> str | None:
     kept_params: list[tuple[str, str]] = []
     if sp.query:
         for k, v in parse_qsl(sp.query, keep_blank_values=True):
-            kl = k.strip().lower()
-            if not kl or kl in _SENSITIVE_QUERY_KEYS or kl in _VOLATILE_QUERY_KEYS:
+            k_clean = k.strip()
+            kl = k_clean.lower()
+            if not kl or kl in _SENSITIVE_QUERY_KEYS or kl in _VOLATILE_QUERY_KEYS or kl.startswith("utm_"):
                 continue
-            vl = "<redacted>" if _looks_like_secret_value(v) else v.strip().lower()
-            kept_params.append((kl, vl))
+            vl = "<redacted>" if _looks_like_secret_value(v) else v.strip()
+            kept_params.append((k_clean, vl))
     if kept_params:
         kept_params.sort()
         return f"{canon_path}?{urlencode(kept_params, safe='/')}"
@@ -1350,17 +1354,17 @@ def has_substantive_observations_text(
     if extension_already_exists or existing_only_languages or symptom_topics or error_signatures or category_mismatch:
         return True
     norm = normalize_text(text, preserve_urls=False)
-    if not norm or len(norm) < 20:
+    if not norm or len(norm) < 12:
         return False
+    # Check for functional requirements/constraints (imperative verbs, ordering/grouping criteria, explicit filter/option requests)
+    if re.search(
+        r"\b(?:adicionar\s+suporte|precis\w+|gostaria|suporte\s+(?:a|ao|para)|apenas\s+em|somente\s+em|corrigir|consertar|arrumar|resolver|incluir|implementar|faltando|separar|separad[oa]s?|dividir|unificar|filtrar\s+por|filtro\s+(?:de|por)|ordenar|ordenad[oa]s?|ordena[cç][aã]o|ordem\s+(?:de|por|crescente|decrescente|cronologica)|agrupar|agrupad[oa]s?|agrupamento|listad[oa]s?\s+por|exibir\s+apenas|mostrar\s+apenas|permitir|op[cç][aã]o\s+(?:de|para)|configura[cç][aã]o|deve(?:m|ra|ria)?\s+(?:ter|ser|exibir|mostrar|ordenar|agrupar|filtrar)|necessari[oa]\s+que|requisito[s]?|obrigatori\w+|nao\s+(?:exibe|mostra|tem|funciona|carrega|reproduz))\b",
+        norm,
+    ):
+        return True
     if _NON_SUBSTANTIVE_NOTE_RE.match(norm) and len(norm) < 60:
         return False
-    # Check for imperative/requirement verbs indicating actionable scope beyond background blurbs
-    return bool(
-        re.search(
-            r"\b(?:adicionar\s+suporte|precis[oa]|suporte\s+(?:a|ao|para)|apenas\s+em|somente\s+em|corrigir|consertar|incluir|implementar|faltando|nao\s+(?:exibe|mostra|tem|funciona|carrega|reproduz))\b",
-            norm,
-        )
-    )
+    return False
 
 
 def infer_semantic_intent(

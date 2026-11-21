@@ -518,6 +518,37 @@ def build_labeled_cases():
             _mk(9024, "[Sugestão]: Sushi Manga — Cadastro", "### Título ou resumo\nSuporte a cadastro na Sushi Manga\n### Descrição da melhoria\nPermitir cadastrar nova conta diretamente no app.\n### Extensão relacionada (opcional)\nSushi Manga\n", ["Sugestão"], created_at="2026-11-02T10:00:00Z"),
             False, False,
         ),
+        # --- v1.7.0 corrective audit scenarios ---
+        (
+            "v170_ne_neg_diff_substantive_obs_empty_topics", "new_extension",
+            _mk(9025, "[Nova extensão]: Sushi Manga", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Idioma\nPortuguês\n### URL do site\nhttps://sushimanga.com\n### Observações\nPreciso que os capítulos sejam ordenados pela data de publicação.\n", ["Nova extensão", "Mangá"]),
+            _mk(9026, "[Nova extensão]: Sushi Manga", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Idioma\nPortuguês\n### URL do site\nhttps://sushimanga.com\n### Observações\nPreciso que os capítulos sejam agrupados pelo nome do autor.\n", ["Nova extensão", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            False, True,
+        ),
+        (
+            "v170_ne_neg_same_generic_topic_diff_obs", "new_extension",
+            _mk(9027, "[Nova extensão]: Sushi Manga", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Idioma\nPortuguês\n### URL do site\nhttps://sushimanga.com\n### Observações\nPreciso de filtro por ano de lançamento.\n", ["Nova extensão", "Mangá"]),
+            _mk(9028, "[Nova extensão]: Sushi Manga", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Idioma\nPortuguês\n### URL do site\nhttps://sushimanga.com\n### Observações\nPreciso de filtro por gênero e autor.\n", ["Nova extensão", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            False, True,
+        ),
+        (
+            "v170_ne_pos_equiv_substantive_obs_paraphrase", "new_extension",
+            _mk(9029, "[Nova extensão]: Sushi Manga", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Idioma\nPortuguês\n### URL do site\nhttps://sushimanga.com\n### Observações\nPreciso que os capítulos sejam ordenados pela data de publicação.\n", ["Nova extensão", "Mangá"]),
+            _mk(9030, "[Nova extensão]: Sushi Manga", "### Tipo\nMangá\n### Nome da extensão\nSushi Manga\n### Idioma\nPortuguês\n### URL do site\nhttps://sushimanga.com\n### Observações\nGostaria que a lista de capítulos fosse ordenada por data de lançamento.\n", ["Nova extensão", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            True, True,
+        ),
+        (
+            "v170_ne_neg_url_path_case_Manga_vs_manga", "new_extension",
+            _mk(9031, "[Nova extensão]: Site Caps", "### Tipo\nMangá\n### Nome da extensão\nSite Caps\n### Idioma\nPortuguês\n### URL do site\nhttps://site.com/Manga\n", ["Nova extensão", "Mangá"]),
+            _mk(9032, "[Nova extensão]: Site Caps", "### Tipo\nMangá\n### Nome da extensão\nSite Caps\n### Idioma\nPortuguês\n### URL do site\nhttps://site.com/manga\n", ["Nova extensão", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            False, True,
+        ),
+        (
+            "v170_ne_neg_functional_query_case_ABC123_vs_abc123", "new_extension",
+            _mk(9033, "[Nova extensão]: Site Query", "### Tipo\nAnime\n### Nome da extensão\nSite Query\n### Idioma\nPortuguês\n### URL do site\nhttps://site.com/watch?id=ABC123\n", ["Nova extensão", "Anime"]),
+            _mk(9034, "[Nova extensão]: Site Query", "### Tipo\nAnime\n### Nome da extensão\nSite Query\n### Idioma\nPortuguês\n### URL do site\nhttps://site.com/watch?id=abc123\n", ["Nova extensão", "Anime"], created_at="2026-11-02T10:00:00Z"),
+            False, True,
+        ),
     ]
     return cases
 

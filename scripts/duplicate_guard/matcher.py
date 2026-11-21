@@ -80,6 +80,176 @@ _CANONICAL_REF_PATTERNS = (
     re.compile(r"(?:duplicad[oa]\s+(?:do|da|de)\s+(?:issue|ticket)\s*#?(\d+)|duplicate\s+of\s+#(\d+))", re.IGNORECASE),
 )
 
+_OBS_BOILERPLATE_STOPWORDS = frozenset({
+    "preciso", "precisa", "gostaria", "quero", "queria", "favor", "obrigado", "obrigada",
+    "agradeco", "valeu", "por", "pela", "pelo", "pelos", "pelas", "para", "pra", "que",
+    "seja", "sejam", "fosse", "fossem", "ser", "ter", "tenha", "tenham", "com", "sem",
+    "uma", "uns", "umas", "dos", "das", "nos", "nas", "aos", "isso", "esse", "essa",
+    "este", "esta", "isto", "aqui", "ali", "extensao", "extensoes", "fonte", "fontes",
+    "site", "sites", "app", "aplicativo", "adicionar", "adicione", "adicionem",
+    "incluir", "inclua", "incluam", "implementar", "implemente", "implementem",
+    "suporte", "suportar", "permitir", "permite", "opcao", "opcoes", "funcao",
+    "funcionalidade", "funcionalidades", "recurso", "recursos", "requisito",
+    "requisitos", "possivel", "poder", "poderia", "deve", "devem", "devera",
+    "deveria", "necessario", "necessaria", "obrigatorio", "obrigatoria", "lista",
+    "listar", "listado", "listados", "listada", "listadas", "exibir", "mostrar",
+    "nome", "manga", "mangas", "anime", "animes", "webtoon", "webtoons", "novel",
+    "novels", "obra", "obras", "forma", "modo", "maneira", "fazer", "conseguir",
+    "tambem", "apenas", "somente", "onde", "como", "quando", "http", "https", "www",
+})
+
+_OBS_CANONICAL_TOKEN_MAP = {
+    "ordenado": "ordenar",
+    "ordenados": "ordenar",
+    "ordenada": "ordenar",
+    "ordenadas": "ordenar",
+    "ordenar": "ordenar",
+    "ordenacao": "ordenar",
+    "ordem": "ordenar",
+    "sort": "ordenar",
+    "sorted": "ordenar",
+    "classificar": "ordenar",
+    "classificados": "ordenar",
+    "agrupado": "agrupar",
+    "agrupados": "agrupar",
+    "agrupada": "agrupar",
+    "agrupadas": "agrupar",
+    "agrupar": "agrupar",
+    "agrupamento": "agrupar",
+    "group": "agrupar",
+    "grouped": "agrupar",
+    "separado": "separar",
+    "separados": "separar",
+    "separada": "separar",
+    "separadas": "separar",
+    "separar": "separar",
+    "separacao": "separar",
+    "dividir": "separar",
+    "dividido": "separar",
+    "divididos": "separar",
+    "filtrado": "filtrar",
+    "filtrados": "filtrar",
+    "filtrada": "filtrar",
+    "filtradas": "filtrar",
+    "filtrar": "filtrar",
+    "filtro": "filtrar",
+    "filtros": "filtrar",
+    "filter": "filtrar",
+    "publicacao": "publicacao",
+    "publicado": "publicacao",
+    "publicados": "publicacao",
+    "lancamento": "publicacao",
+    "lancamentos": "publicacao",
+    "postagem": "publicacao",
+    "cronologica": "data",
+    "cronologico": "data",
+    "cronologicamente": "data",
+    "datas": "data",
+    "autores": "autor",
+    "criador": "autor",
+    "criadores": "autor",
+    "generos": "genero",
+    "categorias": "categoria",
+    "capitulos": "capitulo",
+    "episodios": "episodio",
+    "volumes": "volume",
+    "notificacoes": "notificacao",
+    "favoritos": "favorito",
+    "comentarios": "comentario",
+    "idiomas": "idioma",
+    "linguagem": "idioma",
+    "lingua": "idioma",
+    "linguas": "idioma",
+    "traducoes": "traducao",
+    "tags": "tag",
+    "anos": "ano",
+    "populares": "popularidade",
+    "recentes": "recente",
+    "avaliacoes": "avaliacao",
+    "downloads": "download",
+    "baixar": "download",
+    "leitores": "leitor",
+    "scans": "scan",
+    "scanlators": "scan",
+    "scanlator": "scan",
+    "status": "status",
+}
+
+_OBS_ACTION_OR_AXIS_TOKENS = frozenset({
+    "ordenar", "agrupar", "separar", "filtrar",
+    "data", "autor", "genero", "categoria", "tag", "ano", "popularidade",
+    "recente", "avaliacao", "alfabetica", "alfabetico", "nota", "status",
+    "idioma", "traducao", "volume", "scan", "capitulo", "episodio",
+    "leitor", "download", "historico", "notificacao", "comentario",
+    "favorito", "login", "cadastro", "vip", "paywall", "nsfw",
+})
+
+_OBS_NO_S_STRIP = frozenset({
+    "portugues", "ingles", "frances", "japones", "chines", "status",
+    "apenas", "antes", "depois", "gratis", "simples",
+})
+
+
+def _canonicalize_obs_token(tok: str) -> str:
+    if tok in _OBS_CANONICAL_TOKEN_MAP:
+        return _OBS_CANONICAL_TOKEN_MAP[tok]
+    if tok.endswith("oes") and len(tok) >= 6:
+        cand = tok[:-3] + "ao"
+        return _OBS_CANONICAL_TOKEN_MAP.get(cand, cand)
+    if tok.endswith("s") and len(tok) >= 5 and tok not in _OBS_NO_S_STRIP and not tok.endswith(("es", "ss", "us", "is")):
+        cand = tok[:-1]
+        return _OBS_CANONICAL_TOKEN_MAP.get(cand, cand)
+    return tok
+
+
+def _extract_observation_requirement_tokens(issue: ParsedIssue) -> frozenset[str]:
+    raw_obs = (issue.notes or issue.additional_info or "").strip()
+    if not raw_obs:
+        return frozenset()
+    norm = normalize_text(raw_obs, preserve_urls=False)
+    if not norm:
+        return frozenset()
+    ext_tokens = set(issue.distinctive_tokens)
+    tokens: set[str] = set()
+    for raw_tok in re.findall(r"[a-z0-9]{2,}", norm):
+        if raw_tok in ext_tokens:
+            continue
+        canon = _canonicalize_obs_token(raw_tok)
+        if canon in _OBS_BOILERPLATE_STOPWORDS:
+            continue
+        if len(canon) < 3 and canon not in {"hd", "4k", "ui"}:
+            continue
+        tokens.add(canon)
+    return frozenset(tokens)
+
+
+def _substantive_observations_equivalent(target: ParsedIssue, cand: ParsedIssue) -> bool:
+    """Return True only when substantive observation requirements match without conflicting scope or intent."""
+    if not target.has_substantive_observations and not cand.has_substantive_observations:
+        return True
+    if target.has_substantive_observations != cand.has_substantive_observations:
+        return False
+    if (target.feature_topics - {"nsfw_adult"}) != (cand.feature_topics - {"nsfw_adult"}):
+        return False
+    if target.symptom_topics != cand.symptom_topics:
+        return False
+    if target.error_signatures != cand.error_signatures:
+        return False
+    if target.target_languages != cand.target_languages or target.mentioned_languages != cand.mentioned_languages:
+        return False
+
+    req_t = _extract_observation_requirement_tokens(target)
+    req_c = _extract_observation_requirement_tokens(cand)
+    if not req_t or not req_c:
+        return False
+    if (req_t & _OBS_ACTION_OR_AXIS_TOKENS) != (req_c & _OBS_ACTION_OR_AXIS_TOKENS):
+        return False
+    if req_t == req_c:
+        return True
+    jac = jaccard_similarity(req_t, req_c)
+    ovl = overlap_coefficient(req_t, req_c)
+    return (jac >= 0.75 and ovl >= 0.85) or (ovl == 1.0 and jac >= 0.65 and len(req_t & req_c) >= 2)
+
 
 def _parse_iso_dt(raw_ts: str | None) -> datetime:
     if not raw_ts:
@@ -1378,9 +1548,7 @@ class DuplicateMatcher:
                 feat_c = cand.feature_topics - {"nsfw_adult"}
                 if feat_t and feat_c and not (feat_t & feat_c):
                     return None
-                if (target.has_substantive_observations != cand.has_substantive_observations) or (
-                    feat_t != feat_c
-                ):
+                if not _substantive_observations_equivalent(target, cand):
                     return (
                         "possible_duplicate",
                         0.72,
