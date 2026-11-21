@@ -245,20 +245,20 @@ def _make_enh(
         102, False, "confirmed_duplicate", True,
     ),
     (
-        "ne_02_normalized_url_http_www_m_slash_query",
+        "ne_02_divergent_mobile_and_subpath_requires_review",
         [
             _make_ne(101, "KuroScans", "http://kuroscans.com"),
             _make_ne(102, "KuroScans", "https://m.kuroscans.com/lista/?utm=1#top", created_at="2026-11-02T10:00:00Z"),
         ],
-        102, False, "confirmed_duplicate", True,
+        102, False, "possible_duplicate", False,
     ),
     (
-        "ne_03_equivalent_www2_subdomain",
+        "ne_03_divergent_www2_subdomain_requires_review",
         [
             _make_ne(101, "KuroScans", "https://www2.kuroscans.com"),
             _make_ne(102, "KuroScans", "https://kuroscans.com/home", created_at="2026-11-02T10:00:00Z"),
         ],
-        102, False, "confirmed_duplicate", True,
+        102, False, "possible_duplicate", False,
     ),
     (
         "ne_04_distinct_shared_host_subdomains",

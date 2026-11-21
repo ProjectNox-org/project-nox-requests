@@ -1383,7 +1383,9 @@ def test_34_catalog_verification_required_before_already_fulfilled_close():
     catalog = _build_sample_catalog()
     cfg = load_config(REPO_ROOT / ".github" / "duplicate-guard.json")
 
-    # 1. Pure creation request for HentaiHaven in English (which ALREADY exists in catalog) -> auto-closed!
+    # 1. Pure creation request for HentaiHaven in English (already in catalog in 'en').
+    #    Because real #141 requested Português (Brasil), #141 is NOT an equivalent canonical duplicate for Inglês;
+    #    nevertheless the live catalog proves fulfillment, so #901 closes cleanly with Concluído (completed).
     redundant_en = make_raw(
         901,
         "[Nova extensão]: HentaiHaven",
@@ -1396,18 +1398,40 @@ def test_34_catalog_verification_required_before_already_fulfilled_close():
     )
     assert dec_en.classification == "confirmed_duplicate"
     assert dec_en.match_kind == "already_fulfilled_creation"
-    assert dec_en.canonical_issue == 141
+    assert dec_en.canonical_issue is None
     assert dec_en.should_auto_close is True
 
-    # Apply closure and verify Em análise removed, resolution label added, and catalog reference in comment
     api_en = InMemoryGitHubApi([real[141], redundant_en])
     res_en = GuardActionExecutor(api_en, cfg, {141: real[141], 901: redundant_en}).apply(dec_en)
     assert res_en.action_taken == "auto_closed"
     assert res_en.closed is True
-    assert "Duplicado" in {l["name"] for l in api_en.issues[901]["labels"]}
+    assert "Concluído" in {l["name"] for l in api_en.issues[901]["labels"]}
     assert "Em análise" not in {l["name"] for l in api_en.issues[901]["labels"]}
     assert "anime-extensoes" in api_en.comments[901][0]["body"]
-    assert "#141" in api_en.comments[901][0]["body"]
+
+    # When an equivalent prior ticket in the same language (Inglês) DOES exist, link canonical and apply Duplicado
+    prior_en = make_raw(
+        900,
+        "[Nova extensão]: HentaiHaven",
+        "### Tipo de extensão\nAnime\n### Nome da fonte\nHentaiHaven\n### URL do site\nhttps://hentaihaven.xxx/\n### Idioma\nInglês\n### Observações (opcional)\n_No response_\n",
+        labels=["Nova extensão", "Anime", "Concluído"],
+        state="closed",
+        state_reason="completed",
+        created_at="2026-11-14T10:00:00Z",
+    )
+    dec_en_linked = DuplicateMatcher(parse_corpus([prior_en, redundant_en]), cfg, catalog=catalog).evaluate(
+        parse_corpus([prior_en, redundant_en])[1]
+    )
+    assert dec_en_linked.classification == "confirmed_duplicate"
+    assert dec_en_linked.match_kind == "already_fulfilled_creation"
+    assert dec_en_linked.canonical_issue == 900
+    assert dec_en_linked.should_auto_close is True
+    api_en_linked = InMemoryGitHubApi([prior_en, redundant_en])
+    res_en_linked = GuardActionExecutor(api_en_linked, cfg, {900: prior_en, 901: redundant_en}).apply(dec_en_linked)
+    assert res_en_linked.action_taken == "auto_closed"
+    assert "Duplicado" in {l["name"] for l in api_en_linked.issues[901]["labels"]}
+    assert "Em análise" not in {l["name"] for l in api_en_linked.issues[901]["labels"]}
+    assert "#900" in api_en_linked.comments[901][0]["body"]
 
     # 2. Extension exists in catalog (ExistingAnime, pt-BR), user wrongly selects "Nova extensão"
     #    to request an additional login feature -> MUST NOT auto-close or apply Duplicado!
