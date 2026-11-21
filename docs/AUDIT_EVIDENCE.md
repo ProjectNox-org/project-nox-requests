@@ -125,5 +125,22 @@ Resultados reais observados:
 
 ### 5.2. Validações da Correção `v1.7.0`
 
-- **PR de correção (`v1.7.0`):** registrado após abertura e merge da branch `fix/duplicate-guard-v170-corrective-audit`.
-- **Execuções pós-merge (`main`):** atualizadas nesta seção com os IDs e URLs reais de CI, CodeQL, `backfill` (`dry_run=true`), `reconcile` protegido (`NOX_DUPLICATE_GUARD_AUTO_CLOSE=false`) e `reconcile` real pós-reativação antes da declaração de veredito final.
+- **PR de implementação da `v1.7.0`:** [PR #166](https://github.com/ProjectNox-org/project-nox-requests/pull/166)
+- **Commit de merge da implementação em `main`:** `11b569a2f14d7780e55b7926fd937fdcf059d1ae`
+- **Checks no PR #166 (`3ddf43e`) — todos aprovados (`4/4`):**
+  - CI (`Executar Testes das Automações` / `test`): [Job 136805081497](https://github.com/ProjectNox-org/project-nox-requests/actions/runs/44890511184/job/136805081497) — `success`.
+  - CodeQL (`Analyze (actions)`): [Job 136805078553](https://github.com/ProjectNox-org/project-nox-requests/actions/runs/44890509221/job/136805078553) — `success`.
+  - CodeQL (`Analyze (python)`): [Job 136805078342](https://github.com/ProjectNox-org/project-nox-requests/actions/runs/44890509221/job/136805078342) — `success`.
+  - CodeQL Check Run: [Run 136805191249](https://github.com/ProjectNox-org/project-nox-requests/runs/136805191249) — `success` (0 alertas abertos).
+- **Workflows de `push` em `main` após merge do PR #166 (com contenção `NOX_DUPLICATE_GUARD_AUTO_CLOSE=false`):**
+  - Duplicate Guard (`push` em `main`, [Run 44890621443](https://github.com/ProjectNox-org/project-nox-requests/actions/runs/44890621443)): `success` — `"effective_mode": "backfill"`, `"dry_run": false`, `"auto_close_enabled": false`, `"rule_version": "1.7.0"`, `"evaluated_count": 15`, `"skipped_cached_count": 0` (invalidação automática do cache `v1.6.0`), `"would_or_did_close": 0`, `"error_count": 0`.
+  - CI (`Executar Testes das Automações`, [Run 44890621532](https://github.com/ProjectNox-org/project-nox-requests/actions/runs/44890621532)): `success`.
+  - CodeQL (`Push on main`, [Run 44890621344](https://github.com/ProjectNox-org/project-nox-requests/actions/runs/44890621344)): `success` (`Analyze (actions)` + `Analyze (python)` concluídos sem alertas).
+- **Validações operacionais em produção na `main` (`v1.7.0`):**
+  - `backfill` em `dry_run=true` ([Run 44890749595](https://github.com/ProjectNox-org/project-nox-requests/actions/runs/44890749595)): `success` — `"effective_mode": "backfill"`, `"dry_run": true`, `"auto_close_enabled": false`, `"rule_version": "1.7.0"`, `"evaluated_count": 15`, `"skipped_cached_count": 0`, `"would_or_did_close": 0`, `"error_count": 0`.
+  - `reconcile` protegido (`auto_close_enabled=false`, [Run 44890797059](https://github.com/ProjectNox-org/project-nox-requests/actions/runs/44890797059)): `success` — `"effective_mode": "reconcile"`, `"dry_run": false`, `"auto_close_enabled": false`, `"rule_version": "1.7.0"`, `"evaluated_count": 15`, `"skipped_cached_count": 15` (cache hit), `"would_or_did_close": 0`, `"error_count": 0`.
+  - **Reativação controlada do fechamento automático:** variável `NOX_DUPLICATE_GUARD_AUTO_CLOSE` removida via `gh variable delete`, restaurando `.github/duplicate-guard.json` (`auto_close_enabled: true`).
+  - `reconcile` real #1 pós-reativação ([Run 44890855157](https://github.com/ProjectNox-org/project-nox-requests/actions/runs/44890855157)): `success` — `"effective_mode": "reconcile"`, `"dry_run": false`, `"auto_close_enabled": true`, `"rule_version": "1.7.0"`, `"evaluated_count": 15`, `"skipped_cached_count": 0` (reavaliação automática pela mudança de `auto_close_enabled`), `"would_or_did_close": 0`, `"error_count": 0`.
+  - `reconcile` real #2 com cache hit ([Run 44890915395](https://github.com/ProjectNox-org/project-nox-requests/actions/runs/44890915395)): `success` — `"effective_mode": "reconcile"`, `"dry_run": false`, `"auto_close_enabled": true`, `"rule_version": "1.7.0"`, `"evaluated_count": 15`, `"skipped_cached_count": 15`, `"would_or_did_close": 0`, `"error_count": 0`.
+  - **Integridade das Issues reais e labels confirmada:** todas as **15 Issues abertas** (`#123`, `#125`, `#128`, `#132`, `#134`, `#138`, `#139`, `#140`, `#144`, `#145`, `#146`, `#148`, `#150`, `#151`, `#156`) permaneceram abertas e com suas labels originais (`Nova extensão`, `Problema na extensão`, `Mudança de domínio`, `Sugestão`, `Anime`, `Mangá`, `Conteúdo +18`, `Em análise`) preservadas.
+  - **CodeQL:** `0` alertas abertos em `/repos/ProjectNox-org/project-nox-requests/code-scanning/alerts`.
