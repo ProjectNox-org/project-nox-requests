@@ -710,8 +710,8 @@ def test_c3_08_relative_url_with_base_domain_context_handled_accurately():
     assert dec_diff.classification == "possible_duplicate" and dec_diff.should_auto_close is False
 
 
-def test_c3_09_http_https_percent_encoding_and_case_folding_equivalences():
-    i1 = _ne(321, "Sushi Manga", "http://sushimanga.com/Web%74oons/")
+def test_c3_09_http_https_percent_encoding_and_host_case_folding_equivalences():
+    i1 = _ne(321, "Sushi Manga", "HTTP://SUSHIMANGA.COM/web%74oons/")
     i2 = _ne(322, "Sushi Manga", "https://www.sushimanga.com/webtoons", created_at="2026-11-02T10:00:00Z")
     dec, _, _ = _eval([i1, i2], 322)
     assert dec.classification == "confirmed_duplicate"

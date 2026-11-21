@@ -19,6 +19,7 @@ from .models import (
     CatalogSource,
     ExtensionCatalog,
     ParsedIssue,
+    RULE_ENGINE_VERSION,
     RawIssue,
 )
 from .normalize import (
@@ -527,7 +528,8 @@ def parse_issue(raw: RawIssue, known_extensions: frozenset[str] = frozenset()) -
         dead_evidence=dead_ev,
     )
 
-    obs_only_text = "\n".join(p for p in (sections.get("notes", ""), sections.get("description", ""), sections.get("additional_info", "")) if p)
+    notes_raw = sections.get("notes", "").strip()
+    obs_only_text = "\n".join(p for p in (notes_raw, sections.get("description", ""), sections.get("additional_info", "")) if p)
     has_obs = has_substantive_observations_text(
         obs_only_text,
         extension_already_exists=ext_already_exists,
@@ -548,28 +550,60 @@ def parse_issue(raw: RawIssue, known_extensions: frozenset[str] = frozenset()) -
 
     sparse = is_sparse_description(description, f"{title_symptom} {additional_info}") and not error_sigs
 
-    # Deterministic structured fingerprint (includes source_identity_key, scope cues, reproduction & semantic intent)
+    # Deterministic structured fingerprint preserving case-sensitive URL identity,
+    # substantive observations, semantic intents, feature/symptom topics, and form flags
+    # (excluding volatile fields like updated_at, labels, and comment counters).
     fp_parts = [
+        RULE_ENGINE_VERSION,
         category,
         inferred_cat,
+        str(cat_mismatch),
         semantic_intent,
+        ",".join(sorted(secondary_intents)),
+        str(ext_already_exists),
+        str(has_obs),
+        str(has_reg_signal),
+        dead_ev,
         ext_type or "",
         compact,
+        ",".join(dist_tokens),
         (url_obj.source_identity_key or url_obj.destination_key or url_obj.identity_key) if url_obj else "",
         (url_obj.destination_key or url_obj.identity_key) if url_obj else "",
+        url_obj.norm_path if url_obj and hasattr(url_obj, "norm_path") else (url_obj.normalized_path if url_obj else ""),
+        url_obj.functional_query if url_obj else "",
+        (old_url_obj.source_identity_key or old_url_obj.destination_key or old_url_obj.identity_key) if old_url_obj else "",
         (old_url_obj.destination_key or old_url_obj.identity_key) if old_url_obj else "",
+        (new_url_obj.source_identity_key or new_url_obj.destination_key or new_url_obj.identity_key) if new_url_obj else "",
         (new_url_obj.destination_key or new_url_obj.identity_key) if new_url_obj else "",
+        ",".join(
+            f"{u.destination_key or u.identity_key}:{u.normalized_path}?{u.functional_query}"
+            for u in extra_urls
+        ),
         version_raw,
+        app_name.strip().lower(),
         declared_code,
+        ",".join(sorted(mentioned_langs)),
         ",".join(sorted(target_langs)),
         ",".join(sorted(existing_only_langs)),
         ",".join(sorted(affected_parts)),
+        ",".join(sorted(feature_topics)),
+        ",".join(sorted(symptom_topics)),
+        ",".join(sorted(error_sigs)),
+        ",".join(sorted(tech_tokens)),
         specific_work_hint,
         str(has_global_scope),
         str(has_unnamed_specific),
         ",".join(sorted(mentioned_chapters)),
         ",".join(sorted(mentioned_episodes)),
         ",".join(sorted(api_endpoints)),
+        notes_raw,
+        normalize_text(notes_raw, preserve_urls=True),
+        normalize_text(summary, preserve_urls=True),
+        normalize_text(purpose, preserve_urls=True),
+        normalize_text(
+            f"{sections.get('login', '')}|{sections.get('vip', '')}|{sections.get('nsfw', '')}",
+            preserve_urls=False,
+        ),
         normalize_text(f"{title_symptom} {description} {reproduction} {additional_info}", preserve_urls=True),
         related_ext_compact,
     ]
@@ -626,6 +660,7 @@ def parse_issue(raw: RawIssue, known_extensions: frozenset[str] = frozenset()) -
         title_symptom=title_symptom,
         has_global_work_scope=has_global_scope,
         has_unnamed_specific_work_scope=has_unnamed_specific,
+        notes=notes_raw,
     )
 
 

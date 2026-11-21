@@ -11,7 +11,7 @@ from typing import Literal
 
 Classification = Literal["no_match", "possible_duplicate", "confirmed_duplicate"]
 
-RULE_ENGINE_VERSION = "1.6.0"
+RULE_ENGINE_VERSION = "1.7.0"
 
 INTENT_CREATE_EXTENSION = "create_extension"
 INTENT_BUG_FIX = "bug_fix"
@@ -223,6 +223,7 @@ class ParsedIssue:
     title_symptom: str = ""
     has_global_work_scope: bool = False
     has_unnamed_specific_work_scope: bool = False
+    notes: str = ""
 
 
 def _languages_cover_request(catalog_langs: frozenset[str], requested: frozenset[str]) -> bool:
