@@ -1218,3 +1218,395 @@ def test_32_rate_limit_exit_code_and_checkpoint_resumption(tmp_path, capsys):
     assert api_resume.issues[12]["state_reason"] == "duplicate"
     persisted_after = json.loads(cache_file.read_text(encoding="utf-8"))
     assert persisted_after["last_full_backfill_at"] is not None
+
+
+def _build_sample_catalog():
+    from scripts.duplicate_guard.parser import build_extension_catalog
+
+    return build_extension_catalog({
+        "anime": [
+            {
+                "name": "Aniyomi: HentaiHaven",
+                "pkg": "eu.kanade.tachiyomi.animeextension.en.hentaihaven",
+                "apk": "aniyomi-en.hentaihaven-v16.15.apk",
+                "lang": "en",
+                "version": "16.15",
+                "sources": [{"name": "HentaiHaven", "lang": "en", "baseUrl": "https://hentaihaven.xxx"}],
+            },
+            {
+                "name": "Aniyomi: ExistingAnime",
+                "pkg": "eu.kanade.tachiyomi.animeextension.pt.existinganime",
+                "apk": "aniyomi-pt.existinganime-v16.1.apk",
+                "lang": "pt-BR",
+                "version": "16.1",
+                "sources": [{"name": "ExistingAnime", "lang": "pt-BR", "baseUrl": "https://existinganime.tv"}],
+            },
+        ],
+        "manga": [
+            {
+                "name": "Bakai",
+                "pkg": "eu.kanade.tachiyomi.extension.pt.bakai",
+                "apk": "tachiyomi-pt.bakai-v1.6.25.apk",
+                "lang": "pt-BR",
+                "version": "1.6.25",
+                "sources": [{"name": "Bakai", "lang": "pt-BR", "baseUrl": "https://bakai.org"}],
+            },
+        ],
+    })
+
+
+def test_33_real_141_143_hentaihaven_distinct_objectives_open_and_closed():
+    real = load_real_fixtures()
+    assert 141 in real and 143 in real
+    catalog = _build_sample_catalog()
+    cfg = load_config(REPO_ROOT / ".github" / "duplicate-guard.json")
+
+    parsed_list = parse_corpus([real[141], real[143]])
+    p143 = next(p for p in parsed_list if p.raw.number == 143)
+    assert p143.extension_already_exists is True
+    assert p143.semantic_intent == "language_support"
+    assert p143.inferred_category == "enhancement"
+    assert p143.category_mismatch is True
+    assert p143.existing_only_languages == frozenset({"en"})
+    assert p143.target_languages == frozenset({"pt"})
+
+    # 1. Real state (#141 closed as Concluído + catalog has HentaiHaven in 'en') -> #143 stays OPEN (no_match)
+    dec_closed = DuplicateMatcher(parsed_list, cfg, catalog=catalog).evaluate(p143)
+    assert dec_closed.classification == "no_match"
+    assert dec_closed.should_auto_close is False
+    assert "en" in " ".join(dec_closed.reasons).lower()
+
+    # 2. Simulated dangerous state (#141 OPEN) -> #143 STILL must NOT auto-close or be marked duplicate!
+    r141_open = RawIssue(**{**real[141].__dict__, "state": "open", "closed_at": None})
+    r143_open = RawIssue(**{**real[143].__dict__, "state": "open", "closed_at": None})
+    parsed_open = parse_corpus([r141_open, r143_open])
+    dec_open = DuplicateMatcher(parsed_open, cfg, catalog=catalog).evaluate(
+        next(p for p in parsed_open if p.raw.number == 143)
+    )
+    assert dec_open.classification == "no_match"
+    assert dec_open.should_auto_close is False
+
+    # 3. Updating an older false-positive bot alert on #143 downgrades cleanly to 'cleared' explaining intent
+    old_bot_comment = {
+        "id": 7058334504,
+        "user": {"login": "github-actions[bot]", "type": "Bot"},
+        "body": "<!-- nox-duplicate-guard:v1 issue=143 decision=possible_duplicate canonical=141 action=commented fp=old -->\nOld alert",
+    }
+    api = InMemoryGitHubApi([r141_open, r143_open], initial_comments={143: [old_bot_comment]})
+    res = GuardActionExecutor(api, cfg, {141: r141_open, 143: r143_open}).apply(dec_open)
+    assert res.action_taken == "cleared"
+    assert res.closed is False
+    assert "Duplicado" not in {l["name"] for l in api.issues[143]["labels"]}
+    assert api.issues[143]["state"] == "open"
+    assert "não é duplicata" in api.comments[143][0]["body"].lower()
+
+
+def test_34_catalog_verification_required_before_already_fulfilled_close():
+    real = load_real_fixtures()
+    catalog = _build_sample_catalog()
+    cfg = load_config(REPO_ROOT / ".github" / "duplicate-guard.json")
+
+    # 1. Pure creation request for HentaiHaven in English (which ALREADY exists in catalog) -> auto-closed!
+    redundant_en = make_raw(
+        901,
+        "[Nova extensão]: HentaiHaven",
+        "### Tipo de extensão\nAnime\n### Nome da fonte\nHentaiHaven\n### URL do site\nhttps://hentaihaven.xxx/\n### Idioma\nInglês\n### Observações (opcional)\n_No response_\n",
+        labels=["Nova extensão", "Anime", "Em análise"],
+        created_at="2026-11-15T10:00:00Z",
+    )
+    dec_en = DuplicateMatcher(parse_corpus([real[141], redundant_en]), cfg, catalog=catalog).evaluate(
+        parse_corpus([real[141], redundant_en])[1]
+    )
+    assert dec_en.classification == "confirmed_duplicate"
+    assert dec_en.match_kind == "already_fulfilled_creation"
+    assert dec_en.canonical_issue == 141
+    assert dec_en.should_auto_close is True
+
+    # Apply closure and verify Em análise removed, resolution label added, and catalog reference in comment
+    api_en = InMemoryGitHubApi([real[141], redundant_en])
+    res_en = GuardActionExecutor(api_en, cfg, {141: real[141], 901: redundant_en}).apply(dec_en)
+    assert res_en.action_taken == "auto_closed"
+    assert res_en.closed is True
+    assert "Duplicado" in {l["name"] for l in api_en.issues[901]["labels"]}
+    assert "Em análise" not in {l["name"] for l in api_en.issues[901]["labels"]}
+    assert "anime-extensoes" in api_en.comments[901][0]["body"]
+    assert "#141" in api_en.comments[901][0]["body"]
+
+    # 2. Extension exists in catalog (ExistingAnime, pt-BR), user wrongly selects "Nova extensão"
+    #    to request an additional login feature -> MUST NOT auto-close or apply Duplicado!
+    feature_on_existing = make_raw(
+        902,
+        "[Nova extensão]: ExistingAnime",
+        "### Tipo de extensão\nAnime\n### Nome da fonte\nExistingAnime\n### URL do site\nhttps://existinganime.tv/\n### Idioma\nPortuguês (Brasil)\n### Observações (opcional)\nA extensão já existe no catálogo, mas preciso adicionar suporte a sistema de login e favoritos.\n",
+        labels=["Nova extensão", "Anime", "Em análise"],
+        created_at="2026-11-15T10:00:00Z",
+    )
+    parsed_feat = parse_corpus([feature_on_existing])[0]
+    dec_feat = DuplicateMatcher([parsed_feat], cfg, catalog=catalog).evaluate(parsed_feat)
+    assert dec_feat.should_auto_close is False
+    assert dec_feat.classification == "no_match"
+    assert dec_feat.inferred_category == "enhancement"
+    assert dec_feat.category_mismatch is True
+
+    # 3. Old ticket is Concluído, BUT extension is NOT in the official catalog -> NEVER auto-close!
+    old_done = make_raw(
+        903,
+        "[Nova extensão]: GhostPortal",
+        "### Tipo de extensão\nMangá\n### Nome da fonte\nGhostPortal\n### URL do site\nhttps://ghostportal.example/\n### Idioma\nPortuguês (Brasil)\n",
+        labels=["Nova extensão", "Mangá", "Concluído"],
+        state="closed",
+        state_reason="completed",
+        created_at="2026-10-01T10:00:00Z",
+        closed_at="2026-10-10T10:00:00Z",
+    )
+    new_req = make_raw(
+        904,
+        "[Nova extensão]: GhostPortal",
+        "### Tipo de extensão\nMangá\n### Nome da fonte\nGhostPortal\n### URL do site\nhttps://ghostportal.example/\n### Idioma\nPortuguês (Brasil)\n",
+        labels=["Nova extensão", "Mangá", "Em análise"],
+        created_at="2026-11-10T10:00:00Z",
+    )
+    dec_unverified = DuplicateMatcher(parse_corpus([old_done, new_req]), cfg, catalog=catalog).evaluate(
+        parse_corpus([old_done, new_req])[1]
+    )
+    assert dec_unverified.should_auto_close is False
+    assert dec_unverified.classification == "possible_duplicate"
+    # Verify rendered comment does NOT give a generic prompt to vote 👍 on a closed ticket
+    comment_unverified = render_comment_body(dec_unverified, "commented", {903: old_done, 904: new_req})
+    assert "👍" not in comment_unverified
+    assert "permanece aberta" in comment_unverified.lower()
+
+
+def test_35_semantic_divergences_across_all_categories():
+    cfg = load_config(REPO_ROOT / ".github" / "duplicate-guard.json")
+
+    # A. Same site, different languages -> no_match
+    site_pt = make_raw(
+        910, "[Nova extensão]: DualSite",
+        "### Tipo de extensão\nMangá\n### Nome da fonte\nDualSite\n### URL do site\nhttps://dualsite.com/pt/\n### Idioma\nPortuguês (Brasil)\n",
+        labels=["Nova extensão", "Mangá"], created_at="2026-11-01T10:00:00Z",
+    )
+    site_en = make_raw(
+        911, "[Nova extensão]: DualSite",
+        "### Tipo de extensão\nMangá\n### Nome da fonte\nDualSite\n### URL do site\nhttps://dualsite.com/en/\n### Idioma\nInglês\n",
+        labels=["Nova extensão", "Mangá"], created_at="2026-11-02T10:00:00Z",
+    )
+    assert evaluate_pair([site_pt, site_en], 911, cfg).should_auto_close is False
+
+    # B. Creation vs enhancement & creation vs bug fix in wrong form -> never closed as duplicate
+    orig_create = make_raw(
+        912, "[Nova extensão]: NovoPortal",
+        "### Tipo de extensão\nAnime\n### Nome da fonte\nNovoPortal\n### URL do site\nhttps://novoportal.tv/\n### Idioma\nPortuguês (Brasil)\n",
+        labels=["Nova extensão", "Anime"], created_at="2026-11-01T10:00:00Z",
+    )
+    misfiled_fix = make_raw(
+        913, "[Nova extensão]: NovoPortal",
+        "### Tipo de extensão\nAnime\n### Nome da fonte\nNovoPortal\n### URL do site\nhttps://novoportal.tv/\n### Idioma\nPortuguês (Brasil)\n### Observações (opcional)\nA extensão já existe no catálogo mas parou de funcionar com erro HTTP 403 e não carrega vídeos.\n",
+        labels=["Nova extensão", "Anime"], created_at="2026-11-02T10:00:00Z",
+    )
+    dec_fix = evaluate_pair([orig_create, misfiled_fix], 913, cfg)
+    assert dec_fix.should_auto_close is False
+    assert dec_fix.category_mismatch is True
+    assert dec_fix.inferred_category == "bug"
+
+    # C. Same extension, same category (Sugestão), different feature topics -> no_match
+    enh_login = make_raw(
+        914, "[Sugestão]: SukiScan — Suporte a login",
+        "### Título ou resumo\nAdicionar login e sincronização de conta na SukiScan\n### Descrição da melhoria\nPermitir autenticação com usuário e senha na extensão SukiScan.\n### Extensão relacionada (opcional)\nSukiScan\n",
+        labels=["Sugestão"], created_at="2026-11-01T10:00:00Z",
+    )
+    enh_filter = make_raw(
+        915, "[Sugestão]: SukiScan — Filtro por gênero e ano",
+        "### Título ou resumo\nAdicionar filtro por gênero e ordenação na SukiScan\n### Descrição da melhoria\nPermitir filtrar e ordenar resultados da extensão SukiScan por gênero.\n### Extensão relacionada (opcional)\nSukiScan\n",
+        labels=["Sugestão"], created_at="2026-11-02T10:00:00Z",
+    )
+    assert evaluate_pair([enh_login, enh_filter], 915, cfg).classification == "no_match"
+
+    # D. Same extension, different bugs on same part (Capítulos: wrong/mixed chapters vs missing pages) -> NEVER auto-closed
+    bug_wrong_ch = make_raw(
+        916, "[Problema na extensão]: Manhuarm — Capítulos errados",
+        "### Tipo de extensão\nMangá\n### Nome da extensão\nManhuarm\n### Versão da extensão\n1.6.10\n### Parte afetada\nCapítulos\n### O que está acontecendo?\nAo abrir a obra os capítulos estão trocados e fora de ordem, abrindo outra obra.\n",
+        labels=["Problema na extensão", "Mangá"], created_at="2026-11-01T10:00:00Z",
+    )
+    bug_empty_ch = make_raw(
+        917, "[Problema na extensão]: Manhuarm — Nenhuma página encontrada",
+        "### Tipo de extensão\nMangá\n### Nome da extensão\nManhuarm\n### Versão da extensão\n1.6.10\n### Parte afetada\nCapítulos\n### O que está acontecendo?\nTodas as páginas dão No pages found ao tentar carregar capítulos.\n",
+        labels=["Problema na extensão", "Mangá"], created_at="2026-11-02T10:00:00Z",
+    )
+    dec_diff_bug = evaluate_pair([bug_wrong_ch, bug_empty_ch], 917, cfg)
+    assert dec_diff_bug.should_auto_close is False
+    assert dec_diff_bug.classification != "confirmed_duplicate"
+
+    # E. Misfiled domain change opened as Fonte indisponível -> does not auto-close dead_source
+    dead_old = make_raw(
+        918, "[Fonte indisponível]: MegaScan",
+        "### Tipo de extensão\nMangá\n### Nome da extensão\nMegaScan\n### O que aconteceu?\nO domínio expirou e equipe confirmou encerramento definitivo.\n",
+        labels=["Fonte indisponível", "Mangá"], created_at="2026-11-01T10:00:00Z",
+    )
+    misfiled_domain = make_raw(
+        919, "[Fonte indisponível]: MegaScan",
+        "### Tipo de extensão\nMangá\n### Nome da extensão\nMegaScan\n### O que aconteceu?\nO site não morreu, apenas mudou de domínio para https://megascan.org\n",
+        labels=["Fonte indisponível", "Mangá"], created_at="2026-11-02T10:00:00Z",
+    )
+    assert evaluate_pair([dead_old, misfiled_domain], 919, cfg).should_auto_close is False
+
+
+def test_36_recurring_bugs_and_regressions_three_fundamental_distinctions():
+    cfg = load_config(REPO_ROOT / ".github" / "duplicate-guard.json")
+    catalog = _build_sample_catalog()
+
+    # 1. Duplicate of CURRENT open incident -> auto-close allowed
+    open_incident = make_raw(
+        920, "[Problema na extensão]: Bakai — No pages found",
+        "### Tipo de extensão\nMangá\n### Nome da extensão\nBakai\n### Versão da extensão\n1.6.25\n### Parte afetada\nLeitor / Imagens\n### O que está acontecendo?\nErro No pages found ao abrir capítulos.\n",
+        labels=["Problema na extensão", "Mangá", "Em análise"], created_at="2026-11-10T10:00:00Z",
+    )
+    current_dup = make_raw(
+        921, "[Problema na extensão]: Bakai — Sem páginas",
+        "### Tipo de extensão\nMangá\n### Nome da extensão\nBakai\n### Versão da extensão\n1.6.25\n### Parte afetada\nLeitor / Imagens\n### O que está acontecendo?\nAo tentar ler qualquer capítulo dá No pages found.\n",
+        labels=["Problema na extensão", "Mangá", "Em análise"], created_at="2026-11-11T10:00:00Z",
+    )
+    dec_cur = evaluate_pair([open_incident, current_dup], 921, cfg)
+    assert dec_cur.classification == "confirmed_duplicate"
+    assert dec_cur.should_auto_close is True
+
+    # 2A. Regression months later after Concluído fix with IDENTICAL body/error -> preserved open (no_match)
+    old_fixed = make_raw(
+        922, "[Problema na extensão]: Bakai — No pages found",
+        "### Tipo de extensão\nMangá\n### Nome da extensão\nBakai\n### Versão da extensão\n1.6.10\n### Parte afetada\nLeitor / Imagens\n### O que está acontecendo?\nErro No pages found ao abrir capítulos em https://bakai.org/.\n",
+        labels=["Problema na extensão", "Mangá", "Concluído"],
+        state="closed", state_reason="completed",
+        created_at="2026-08-01T10:00:00Z", closed_at="2026-08-05T10:00:00Z",
+    )
+    months_later = make_raw(
+        923, "[Problema na extensão]: Bakai — No pages found",
+        "### Tipo de extensão\nMangá\n### Nome da extensão\nBakai\n### Versão da extensão\n1.6.10\n### Parte afetada\nLeitor / Imagens\n### O que está acontecendo?\nErro No pages found ao abrir capítulos em https://bakai.org/.\n",
+        labels=["Problema na extensão", "Mangá", "Em análise"],
+        created_at="2026-11-05T10:00:00Z",
+    )
+    dec_months = evaluate_pair([old_fixed, months_later], 923, cfg)
+    assert dec_months.classification == "no_match"
+    assert dec_months.should_auto_close is False
+
+    # 2B. Regression WITHIN < 3 days when catalog released newer version OR user reports regression -> no_match!
+    fixed_yesterday = make_raw(
+        924, "[Problema na extensão]: Bakai — No pages found",
+        "### Tipo de extensão\nMangá\n### Nome da extensão\nBakai\n### Versão da extensão\n1.6.20\n### Parte afetada\nLeitor / Imagens\n### O que está acontecendo?\nErro No pages found ao abrir capítulos.\n",
+        labels=["Problema na extensão", "Mangá", "Concluído"],
+        state="closed", state_reason="completed",
+        created_at="2026-11-10T10:00:00Z", closed_at="2026-11-11T10:00:00Z",
+    )
+    regression_next_day = make_raw(
+        925, "[Problema na extensão]: Bakai — Voltou erro",
+        "### Tipo de extensão\nMangá\n### Nome da extensão\nBakai\n### Versão da extensão\n1.6.20\n### Parte afetada\nLeitor / Imagens\n### O que está acontecendo?\nApós atualizar voltou a dar o erro No pages found.\n",
+        labels=["Problema na extensão", "Mangá", "Em análise"],
+        created_at="2026-11-12T10:00:00Z",  # Only 1 day after closed_at!
+    )
+    dec_fast_reg = DuplicateMatcher(parse_corpus([fixed_yesterday, regression_next_day]), cfg, catalog=catalog).evaluate(
+        parse_corpus([fixed_yesterday, regression_next_day])[1]
+    )
+    assert dec_fast_reg.classification == "no_match"
+    assert dec_fast_reg.should_auto_close is False
+
+    # 2C. Stale open bug separated from new ticket by an INTERVENING Concluído fix -> never auto-closes!
+    stale_open = make_raw(
+        926, "[Problema na extensão]: OrionBug — No pages found",
+        "### Tipo de extensão\nMangá\n### Nome da extensão\nOrionBug\n### Versão da extensão\n1.0.0\n### Parte afetada\nLeitor / Imagens\n### O que está acontecendo?\nNo pages found.\n",
+        labels=["Problema na extensão", "Mangá"], created_at="2026-09-01T10:00:00Z",
+    )
+    intervening_fix = make_raw(
+        927, "[Problema na extensão]: OrionBug — Leitor corrigido",
+        "### Tipo de extensão\nMangá\n### Nome da extensão\nOrionBug\n### Versão da extensão\n1.1.0\n### Parte afetada\nLeitor / Imagens\n### O que está acontecendo?\nCorrigido leitor.\n",
+        labels=["Problema na extensão", "Mangá", "Concluído"],
+        state="closed", state_reason="completed",
+        created_at="2026-10-01T10:00:00Z", closed_at="2026-10-05T10:00:00Z",
+    )
+    reoccurred = make_raw(
+        928, "[Problema na extensão]: OrionBug — No pages found",
+        "### Tipo de extensão\nMangá\n### Nome da extensão\nOrionBug\n### Versão da extensão\n1.2.0\n### Parte afetada\nLeitor / Imagens\n### O que está acontecendo?\nNo pages found.\n",
+        labels=["Problema na extensão", "Mangá"], created_at="2026-11-10T10:00:00Z",
+    )
+    dec_intervening = evaluate_pair([stale_open, intervening_fix, reoccurred], 928, cfg)
+    assert dec_intervening.should_auto_close is False
+
+    # 3. Different problem with generic HTTP 403 / Cloudflare symptom across distinct parts -> never auto-closes
+    b403_login = make_raw(
+        929, "[Problema na extensão]: CeriseScan — HTTP 403 no Login",
+        "### Tipo de extensão\nMangá\n### Nome da extensão\nCeriseScan\n### Parte afetada\nLogin\n### O que está acontecendo?\nErro HTTP 403 ao autenticar conta.\n",
+        labels=["Problema na extensão", "Mangá"], created_at="2026-11-01T10:00:00Z",
+    )
+    b403_reader = make_raw(
+        930, "[Problema na extensão]: CeriseScan — HTTP 403 no Leitor",
+        "### Tipo de extensão\nMangá\n### Nome da extensão\nCeriseScan\n### Parte afetada\nLeitor / Imagens\n### O que está acontecendo?\nErro HTTP 403 ao abrir imagens.\n",
+        labels=["Problema na extensão", "Mangá"], created_at="2026-11-02T10:00:00Z",
+    )
+    dec_generic_http = evaluate_pair([b403_login, b403_reader], 930, cfg)
+    assert dec_generic_http.classification == "no_match"
+    assert dec_generic_http.should_auto_close is False
+
+
+def test_37_duplicate_labels_lifecycle_and_workflow_conflict_protection(tmp_path, capsys):
+    cfg = load_config(REPO_ROOT / ".github" / "duplicate-guard.json")
+
+    orig = make_raw(
+        940, "[Nova extensão]: ZetaScan",
+        "### Tipo de extensão\nMangá\n### Nome da fonte\nZetaScan\n### URL do site\nhttps://zetascan.com/\n### Idioma\nPortuguês (Brasil)\n",
+        labels=["Nova extensão", "Mangá", "Em análise"], created_at="2026-11-01T10:00:00Z",
+    )
+    dup = make_raw(
+        941, "[Nova extensão]: Zeta Scan",
+        "### Tipo de extensão\nMangá\n### Nome da fonte\nZeta Scan\n### URL do site\nhttps://www.zetascan.com/\n### Idioma\nPortuguês (Brasil)\n",
+        labels=["Nova extensão", "Mangá", "Conteúdo +18"],  # Simulates race: Em análise added by label-issues right as close happens!
+        created_at="2026-11-02T10:00:00Z",
+    )
+
+    class RacingLabelApi(InMemoryGitHubApi):
+        def close_issue(self, issue_number: int, *, state_reason: str = "duplicate") -> dict:
+            res = super().close_issue(issue_number, state_reason=state_reason)
+            # Simulate concurrent label-issues.yml adding 'Em análise' right before post-close refresh
+            if not any(l["name"] == "Em análise" for l in self.issues[issue_number]["labels"]):
+                self.issues[issue_number]["labels"].append({"name": "Em análise"})
+            return res
+
+    api = RacingLabelApi([orig, dup])
+    dec = evaluate_pair([orig, dup], 941, cfg)
+    res = GuardActionExecutor(api, cfg, {940: orig, 941: dup}).apply(dec)
+    assert res.action_taken == "auto_closed"
+    assert res.closed is True
+    assert "Duplicado" in res.labels_added
+    assert "Em análise" in res.labels_removed
+
+    final_lbls = {l["name"] for l in api.issues[941]["labels"]}
+    assert final_lbls == {"Nova extensão", "Mangá", "Conteúdo +18", "Duplicado"}
+    assert "Em análise" not in final_lbls
+
+    comment_body = api.comments[941][0]["body"]
+    assert "#940" in comment_body
+    assert "https://github.com/ProjectNox-org/project-nox-requests/issues/940" in comment_body
+    assert api.issues[940]["state"] == "open"
+
+    # Re-running backfill must remain strictly idempotent (zero extra writes/comments/labels)
+    writes_before = len(api.writes)
+    res_again = GuardActionExecutor(api, cfg, {940: orig, 941: dup}).apply(dec)
+    assert res_again.action_taken == "noop_idempotent"
+    assert len(api.writes) == writes_before
+    assert len(api.comments[941]) == 1
+
+    # Closed duplicate left missing Duplicado & retaining Em análise gets sanitized safely via backfill
+    broken_closed_dup = make_raw(
+        942, "[Nova extensão]: BrokenClosedDup",
+        "### Tipo de extensão\nAnime\n### Nome da fonte\nBrokenClosedDup\n### URL do site\nhttps://brokenclosed.tv/\n",
+        labels=["Nova extensão", "Anime", "Em análise"],
+        state="closed", state_reason="duplicate",
+        created_at="2026-11-03T10:00:00Z", closed_at="2026-11-04T10:00:00Z",
+    )
+    api_clean = InMemoryGitHubApi([broken_closed_dup])
+    rc = run_cli(["--mode", "backfill", "--cache-file", str(tmp_path / "clean_cache.json")], client_override=api_clean)
+    assert rc == 0
+    _ = capsys.readouterr()
+    cleaned_lbls = {l["name"] for l in api_clean.issues[942]["labels"]}
+    assert cleaned_lbls == {"Nova extensão", "Anime", "Duplicado"}
+    assert "Em análise" not in cleaned_lbls
+    # Closed non-duplicate workflows remain valid YAML
+    closed_guard = yaml.safe_load((REPO_ROOT / ".github" / "workflows" / "issue-closed-guard.yml").read_text(encoding="utf-8"))
+    assert closed_guard["permissions"] == {"issues": "write"}

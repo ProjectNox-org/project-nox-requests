@@ -10,7 +10,18 @@ from typing import Literal
 
 Classification = Literal["no_match", "possible_duplicate", "confirmed_duplicate"]
 
-RULE_ENGINE_VERSION = "1.1.0"
+RULE_ENGINE_VERSION = "1.2.0"
+
+INTENT_CREATE_EXTENSION = "create_extension"
+INTENT_BUG_FIX = "bug_fix"
+INTENT_FEATURE_ADDITION = "feature_addition"
+INTENT_LANGUAGE_SUPPORT = "language_support"
+INTENT_MISSING_CONTENT = "missing_content"
+INTENT_LOADING_ISSUE = "loading_issue"
+INTENT_DOMAIN_CHANGE = "domain_change"
+INTENT_DEAD_SOURCE = "dead_source"
+
+LABEL_DONE = "Concluído"
 
 TRUSTED_BOT_LOGINS = frozenset({
     "github-actions[bot]",
@@ -184,6 +195,127 @@ class ParsedIssue:
     is_duplicate_marked: bool
     content_fingerprint: str
     body_is_sparse: bool
+    declared_language: str = ""
+    semantic_intent: str = ""
+    secondary_intents: frozenset[str] = frozenset()
+    inferred_category: str = ""
+    category_mismatch: bool = False
+    extension_already_exists: bool = False
+    mentioned_languages: frozenset[str] = frozenset()
+    target_languages: frozenset[str] = frozenset()
+    existing_only_languages: frozenset[str] = frozenset()
+    feature_topics: frozenset[str] = frozenset()
+    symptom_topics: frozenset[str] = frozenset()
+    has_substantive_observations: bool = False
+    has_regression_signal: bool = False
+    specific_work_hint: str = ""
+
+
+@dataclass(frozen=True)
+class CatalogExtension:
+    """Published extension metadata from official Project Nox catalog repositories."""
+
+    ext_type: str
+    name: str
+    compact_name: str
+    pkg: str
+    apk: str
+    version: str
+    version_tuple: tuple[int, ...]
+    languages: frozenset[str]
+    domains: frozenset[str]
+    base_urls: tuple[str, ...]
+    catalog_repo: str
+
+    def supports_languages(self, requested: frozenset[str]) -> bool:
+        """Return True when the published extension covers every requested language."""
+        if not requested:
+            return True
+        if "all" in self.languages:
+            return True
+        if "all" in requested:
+            # Multi-language request cannot be considered fulfilled by single-language build
+            return len(self.languages - {"all"}) > 1
+        return requested <= self.languages
+
+    def to_summary_dict(self) -> dict:
+        return {
+            "ext_type": self.ext_type,
+            "name": self.name,
+            "pkg": self.pkg,
+            "apk": self.apk,
+            "version": self.version,
+            "languages": sorted(self.languages),
+            "base_urls": list(self.base_urls),
+            "catalog_repo": self.catalog_repo,
+        }
+
+
+class ExtensionCatalog:
+    """Indexed lookup over published extensions in manga-extensoes and anime-extensoes."""
+
+    def __init__(self, extensions: list[CatalogExtension] | tuple[CatalogExtension, ...] = ()) -> None:
+        self.extensions: tuple[CatalogExtension, ...] = tuple(extensions)
+        self._by_type_domain: dict[tuple[str, str], list[CatalogExtension]] = {}
+        self._by_type_name: dict[tuple[str, str], list[CatalogExtension]] = {}
+        for ext in self.extensions:
+            for dom in ext.domains:
+                self._by_type_domain.setdefault((ext.ext_type, dom), []).append(ext)
+            if ext.compact_name:
+                self._by_type_name.setdefault((ext.ext_type, ext.compact_name), []).append(ext)
+
+    def __bool__(self) -> bool:
+        return bool(self.extensions)
+
+    def find_matching_extensions(self, target: ParsedIssue) -> tuple[CatalogExtension, ...]:
+        """Return published catalog extensions verified to match target by type + domain + name."""
+        if not self.extensions or not target.url or not target.url.is_valid_domain:
+            return ()
+        types_to_check = (target.ext_type,) if target.ext_type else ("Mangá", "Anime")
+        matches: list[CatalogExtension] = []
+        seen_pkgs: set[str] = set()
+        for ext_type in types_to_check:
+            for ext in self._by_type_domain.get((ext_type, target.url.identity_key), ()):
+                if ext.pkg in seen_pkgs:
+                    continue
+                if self._name_compatible(target, ext):
+                    seen_pkgs.add(ext.pkg)
+                    matches.append(ext)
+        return tuple(matches)
+
+    def find_by_name_and_type(self, compact_name: str, ext_type: str | None) -> tuple[CatalogExtension, ...]:
+        """Lookup catalog extensions by compact name and optional ext_type."""
+        if not self.extensions or not compact_name:
+            return ()
+        types_to_check = (ext_type,) if ext_type else ("Mangá", "Anime")
+        found: list[CatalogExtension] = []
+        seen_pkgs: set[str] = set()
+        for et in types_to_check:
+            for ext in self._by_type_name.get((et, compact_name), ()):
+                if ext.pkg not in seen_pkgs:
+                    seen_pkgs.add(ext.pkg)
+                    found.append(ext)
+        return tuple(found)
+
+    @staticmethod
+    def _name_compatible(target: ParsedIssue, ext: CatalogExtension) -> bool:
+        t_name = target.compact_name
+        e_name = ext.compact_name
+        if not t_name or not e_name:
+            return bool(target.url and target.url.identity_key in ext.domains)
+        if t_name == e_name or t_name in e_name or e_name in t_name:
+            return True
+        if target.url and target.url.host_stem and len(target.url.host_stem) >= 4:
+            if target.url.host_stem in e_name and target.url.host_stem in t_name:
+                return True
+        # Character bigram Dice similarity for minor typos (e.g. WachtAnimeHentai vs WatchAnimeHentai)
+        if len(t_name) >= 2 and len(e_name) >= 2:
+            a_bg = {t_name[i : i + 2] for i in range(len(t_name) - 1)}
+            b_bg = {e_name[i : i + 2] for i in range(len(e_name) - 1)}
+            overlap = (2.0 * len(a_bg & b_bg)) / (len(a_bg) + len(b_bg))
+            if overlap >= 0.60:
+                return True
+        return False
 
 
 @dataclass(frozen=True)
@@ -198,6 +330,8 @@ class CandidateEvaluation:
     contradictions: tuple[str, ...] = ()
     candidate_is_open: bool = True
     candidate_resolution: str | None = None
+    match_kind: str = "duplicate"
+    intent_relation: str = "same"
 
 
 @dataclass(frozen=True)
@@ -213,6 +347,13 @@ class GuardDecision:
     fingerprint: str
     should_auto_close: bool
     blocked_reason: str | None = None
+    match_kind: str = "none"
+    semantic_intent: str = ""
+    inferred_category: str = ""
+    category_mismatch: bool = False
+    catalog_extension: dict | None = None
+    resolution_label: str = LABEL_DUPLICATE
+    close_state_reason: str = "duplicate"
 
 
 @dataclass(frozen=True)

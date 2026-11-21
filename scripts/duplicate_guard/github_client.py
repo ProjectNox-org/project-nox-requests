@@ -245,3 +245,44 @@ class GitHubClient:
                 _, _, data = self._request("PATCH", url, payload={"state": "closed", "state_reason": "not_planned"})
                 return data if isinstance(data, dict) else {}
             raise
+
+    def fetch_catalog_json(self, repo_slug: str, path: str = "index.min.json") -> list[dict[str, Any]]:
+        """Fetch and decode index.min.json from an official Project Nox catalog repository."""
+        allowed_repos = {"ProjectNox-org/manga-extensoes", "ProjectNox-org/anime-extensoes"}
+        if repo_slug not in allowed_repos:
+            raise ValueError(f"Unsupported catalog repository: {repo_slug}")
+        import base64
+
+        _, _, data = self._request("GET", f"{API_BASE}/repos/{repo_slug}/contents/{path}")
+        if isinstance(data, list):
+            return [item for item in data if isinstance(item, dict)]
+        if isinstance(data, dict):
+            content_b64 = data.get("content")
+            if isinstance(content_b64, str) and content_b64.strip():
+                raw_json = base64.b64decode(content_b64).decode("utf-8", errors="replace")
+                parsed = json.loads(raw_json)
+                if isinstance(parsed, list):
+                    return [item for item in parsed if isinstance(item, dict)]
+            blob_sha = data.get("sha")
+            if isinstance(blob_sha, str) and blob_sha:
+                _, _, blob = self._request("GET", f"{API_BASE}/repos/{repo_slug}/git/blobs/{blob_sha}")
+                if isinstance(blob, dict) and isinstance(blob.get("content"), str):
+                    raw_json = base64.b64decode(blob["content"]).decode("utf-8", errors="replace")
+                    parsed = json.loads(raw_json)
+                    if isinstance(parsed, list):
+                        return [item for item in parsed if isinstance(item, dict)]
+        return []
+
+    def list_catalog_extensions(self) -> dict[str, list[dict[str, Any]]]:
+        """Load published extension indexes from manga-extensoes and anime-extensoes safely."""
+        catalog: dict[str, list[dict[str, Any]]] = {"manga": [], "anime": []}
+        targets = (
+            ("manga", "ProjectNox-org/manga-extensoes"),
+            ("anime", "ProjectNox-org/anime-extensoes"),
+        )
+        for key, slug in targets:
+            try:
+                catalog[key] = self.fetch_catalog_json(slug, "index.min.json")
+            except (GitHubApiError, ValueError, json.JSONDecodeError):
+                catalog[key] = []
+        return catalog

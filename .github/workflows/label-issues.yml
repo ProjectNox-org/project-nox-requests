@@ -195,10 +195,20 @@ jobs:
 
             const hasStatus = liveLabels.some(l => statuses.includes(l) || l.startsWith('status:')) ||
                               Array.from(labelsToAdd).some(l => statuses.includes(l));
-            const hasResolution = liveLabels.some(l => resolutions.includes(l) || l.startsWith('resolution:'));
+            const hasResolution = liveLabels.some(l => resolutions.includes(l) || l.startsWith('resolution:')) ||
+                                  Array.from(labelsToAdd).some(l => resolutions.includes(l));
 
             if (!liveClosed && !hasStatus && !hasResolution) {
               labelsToAdd.add('Em análise');
+            }
+            if (liveClosed || hasResolution) {
+              labelsToAdd.delete('Em análise');
+              labelsToAdd.delete('Aguardando informações');
+              for (const stale of ['Em análise', 'Aguardando informações', 'status:triage', 'status:needs-info']) {
+                if (liveLabels.includes(stale)) {
+                  labelsToRemove.add(stale);
+                }
+              }
             }
 
             // -------------------------------------------------------------
@@ -213,7 +223,7 @@ jobs:
               }
             }
 
-            const toAddList = Array.from(labelsToAdd).filter(l => !currentLabels.includes(l));
+            const toAddList = Array.from(labelsToAdd).filter(l => !liveLabels.includes(l));
             if (toAddList.length > 0) {
               console.log(`Adicionando labels oficiais: ${toAddList.join(', ')}`);
               await github.rest.issues.addLabels({ ...params, labels: toAddList });

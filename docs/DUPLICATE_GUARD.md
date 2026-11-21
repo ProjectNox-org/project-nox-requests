@@ -27,30 +27,35 @@ Um cron de 5 minutos executaria 288 jobs/dia no GitHub Actions, consumindo minut
 
 ---
 
-## 2. Critérios de Detecção por Categoria
+## 2. Interpretação Semântica, Catálogo Oficial e Critérios de Detecção
 
 O motor aplica ordem total determinística `(created_at, number)`: uma Issue mais antiga nunca é fechada em favor de uma mais nova, evitando fechamento mútuo em aberturas simultâneas. Pull Requests são ignorados.
 
-1. **Nova extensão (`new_extension`):** nunca mistura `Mangá` e `Anime`; normaliza Unicode, espaços, typos leves (`Wacht` vs `Watch`) e URLs (`http`/`https`, `www.`, barras finais, typos reais de esquema e plataformas compartilhadas como `github.io`, `workers.dev`, `t.me`). Domínios distintos nunca fecham automaticamente.
-2. **Extensão com problema (`bug`):** exige mesma extensão e tipo compatível; nunca fecha apenas pelo nome da extensão. Rejeita códigos HTTP contraditórios (`403` vs `404`), partes afetadas incompatíveis (`Login` vs `Leitor`), descrições insuficientes (`< 15` chars sem erro técnico) e regressões contra tickets `Concluído` de versão anterior ou fechados há ≥ 3 dias.
+- **Camada Semântica e Verificação de Catálogo (`ExtensionCatalog`):**
+  - Analisa `### Idioma`, `### Observações`, descrições, funcionalidades solicitadas, tópicos de sintoma, sinais de regressão e evidências de que a extensão já existe, além da categoria do formulário (sem mutar a categoria oficial automaticamente sem política segura).
+  - Nome, domínio e tipo idênticos **não** encerram automaticamente quando há divergência material de intenção, idioma ou funcionalidade (ex.: `#141` criação inicial do HentaiHaven vs `#143` solicitação de suporte ao conteúdo em português na extensão existente).
+  - Consulta diretamente `index.min.json` de `ProjectNox-org/manga-extensoes` e `ProjectNox-org/anime-extensoes` (com cache incremental de 6h): pedidos puros de criação de uma extensão já publicada no idioma solicitado podem ser encerrados automaticamente com referência à extensão existente; pedidos de novo idioma ou recurso em extensão já existente permanecem abertos e nunca recebem `Duplicado`.
+
+1. **Nova extensão (`new_extension`):** nunca mistura `Mangá` e `Anime`; normaliza Unicode, espaços, typos leves (`Wacht` vs `Watch`), idiomas e URLs (`http`/`https`, `www.`, barras finais, typos reais de esquema e plataformas compartilhadas como `github.io`, `workers.dev`, `t.me`). Domínios distintos, idiomas distintos, observações com escopo divergente ou tickets `Concluído` sem comprovação no catálogo oficial nunca fecham automaticamente.
+2. **Extensão com problema (`bug`):** distingue três situações fundamentais — (i) **duplicata do incidente atual em aberto**, (ii) **regressão após correção** (ticket anterior `Concluído`, correção intermediária concluída entre ocorrências, versão mais recente da extensão/catálogo ou sinal explícito de recorrência, sem depender apenas da janela fixa de 3 dias) e (iii) **problema diferente com sintoma semelhante** (capítulos trocados/errados vs ausência de páginas, PAYWALL/VIP, idioma/legenda ou códigos HTTP genéricos como `403`/`404` em partes distintas). Nunca fecha automaticamente regressões nem partes contraditórias.
 3. **Mudança de domínio (`domain_change`):** compara extensão, tipo, `URL antiga` e `URL nova`; se a `URL nova` diferir (ex.: `#130` vs `#153`), retorna `no_match`.
-4. **Fonte indisponível (`dead_source`):** exige mesma fonte, janela temporal (30 dias) e separa encerramento definitivo de instabilidade/manutenção temporária.
-5. **Sugestão de melhoria (`enhancement`):** isola por extensão relacionada (`#144` Blackout Comics vs `#151` Hanami Heaven) e prioriza revisão humana (`possible_duplicate`).
+4. **Fonte indisponível (`dead_source`):** exige mesma fonte, janela temporal (30 dias), mesma intenção e separa encerramento definitivo de instabilidade/manutenção temporária.
+5. **Sugestão de melhoria (`enhancement`):** isola por extensão relacionada (`#144` Blackout Comics vs `#151` Hanami Heaven), tópicos funcionais e idiomas, priorizando revisão humana (`possible_duplicate`).
 
 ---
 
-## 3. Segurança de Comentários, Fechamento Transacional e Proteções
+## 3. Segurança de Comentários, Fechamento Transacional e Ciclo de Labels
 
 - **Validação estrita de autoria:**
   - Apenas comentários de `github-actions[bot]` (`type: Bot`) com marcador `<!-- nox-duplicate-guard:v1 issue=<N> ... -->` são reconhecidos e editados pelo bot. Marcadores falsificados ou copiados por usuários comuns são ignorados.
   - Comandos de override (`/not-duplicate` ou `<!-- nox-duplicate-guard:ignore -->`) só são aceitos quando publicados por contas com `author_association` em `OWNER`, `MEMBER` ou `COLLABORATOR`, ou quando uma label controlada (`ignorar-duplicata` / `duplicate-guard:ignore`) está aplicada na Issue.
 - **Sequência transacional do encerramento automático (`auto_closed`):**
-  1. Reconsulta ao vivo a Issue alvo e o ticket original (canônico precisa estar `open` e não ser `Duplicado`).
-  2. **Publica/atualiza primeiro o comentário explicativo** com a justificativa e link para o original. Se falhar, aborta imediatamente (`aborted_comment_failed`) sem rotular nem fechar.
-  3. Aplica a label oficial `Duplicado`. Se falhar, rebaixa o comentário para `commented` e aborta antes de fechar.
-  4. Fecha a Issue com `state_reason: "duplicate"` (fallback automático para `"not_planned"` em HTTP 422). Se o fechamento falhar, **reverte a label `Duplicado`** e ajusta o comentário, evitando Issues abertas com label de resolução inconsistente.
-  5. Remove labels iniciais (`Em análise`, `Aguardando informações`) apenas após confirmação do fechamento.
-- **Preservação de intervenções humanas:** nunca fecha nem remove `Aceito`, `Em desenvolvimento`, `Concluído`, `Recusado` ou `Cancelado`; nunca re-fecha Issues reabertas por humanos (`state_reason == "reopened"` ou reabertura após `auto_closed`).
+  1. Reconsulta ao vivo a Issue alvo e o ticket original (canônico precisa estar `open` e não ser `Duplicado`, exceto na detecção de criação já atendida via catálogo oficial).
+  2. **Publica/atualiza primeiro o comentário explicativo** com a justificativa detalhada, número (`#X`) e link completo do ticket original/catálogo. Se falhar, aborta imediatamente (`aborted_comment_failed`) sem rotular nem fechar.
+  3. Aplica a label oficial `Duplicado` (ou `Concluído` quando comprovada apenas pelo catálogo sem ticket anterior). Se falhar, rebaixa o comentário para informativo e aborta antes de fechar.
+  4. Fecha a Issue com `state_reason: "duplicate"` (fallback automático para `"not_planned"` em HTTP 422). Se o fechamento falhar, **reverte a label aplicada** e ajusta o comentário.
+  5. **Somente após confirmar o fechamento**, reconsulta a Issue ao vivo e remove `Em análise`, `Aguardando informações` e equivalentes legados (evitando corrida com `label-issues.yml`), preservando categoria (`Nova extensão`, `Problema na extensão` etc.), tipo (`Anime`/`Mangá`) e `Conteúdo +18`.
+- **Preservação de intervenções humanas:** nunca fecha nem remove `Aceito`, `Em desenvolvimento`, `Concluído`, `Recusado` ou `Cancelado`; nunca re-fecha Issues reabertas por humanos (`state_reason == "reopened"` ou reabertura após `auto_closed`); nunca envia solicitação genérica para votar 👍 em tickets já encerrados quando o objetivo pode ser distinto.
 
 ---
 
