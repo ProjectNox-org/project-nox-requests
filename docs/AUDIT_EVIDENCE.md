@@ -144,3 +144,56 @@ Resultados reais observados:
   - `reconcile` real #2 com cache hit ([Run 44890915395](https://github.com/ProjectNox-org/project-nox-requests/actions/runs/44890915395)): `success` — `"effective_mode": "reconcile"`, `"dry_run": false`, `"auto_close_enabled": true`, `"rule_version": "1.7.0"`, `"evaluated_count": 15`, `"skipped_cached_count": 15`, `"would_or_did_close": 0`, `"error_count": 0`.
   - **Integridade das Issues reais e labels confirmada:** todas as **15 Issues abertas** (`#123`, `#125`, `#128`, `#132`, `#134`, `#138`, `#139`, `#140`, `#144`, `#145`, `#146`, `#148`, `#150`, `#151`, `#156`) permaneceram abertas e com suas labels originais (`Nova extensão`, `Problema na extensão`, `Mudança de domínio`, `Sugestão`, `Anime`, `Mangá`, `Conteúdo +18`, `Em análise`) preservadas.
   - **CodeQL:** `0` alertas abertos em `/repos/ProjectNox-org/project-nox-requests/code-scanning/alerts`.
+  - **Sync de evidências (`PR #167`, commit `aae6a9e`):** CI ([Run 44891012487](https://github.com/ProjectNox-org/project-nox-requests/actions/runs/44891012487)) e CodeQL ([Run 44891011971](https://github.com/ProjectNox-org/project-nox-requests/actions/runs/44891011971)) aprovados.
+
+---
+
+## 6. Correção Final `v1.7.0` → `v1.7.1` (Polaridade, Negações, Restrições e Modalidade em Observações)
+
+### 6.1. Problema Identificado e Reprodução Real Antes (`v1.7.0`, commit `aae6a9e0c47df023142a8c996bd3dde564fe274f`)
+
+- **Causa-raiz:** Em [`scripts/duplicate_guard/matcher.py`](../scripts/duplicate_guard/matcher.py), `_OBS_BOILERPLATE_STOPWORDS` descartava operadores críticos como `com`, `sem`, `apenas`, `somente`, `obrigatorio`, `permitir`, `exibir`, `incluir` e `adicionar`. Além disso, `_extract_observation_requirement_tokens()` e `_substantive_observations_equivalent()` tratavam os tokens como saco de palavras simples, sem codificar polaridade (`polarity:neg`), vínculo entre negação/ação/objeto, direção (`crescente` vs `decrescente`), visibilidade (`exibir` vs `ocultar`) nem modalidade (`obrigatorio`/`exigir` vs `opcional`/`dispensar`).
+- **Reprodução real executada antes da correção sobre `aae6a9e0c47df023142a8c996bd3dde564fe274f` (simulação offline):**
+  1. **Com filtro vs Sem filtro (`"Quero a extensão com filtro por autor."` vs `"Quero a extensão sem filtro por autor."`):**
+     - `toks = (frozenset({'autor', 'filtrar'}), frozenset({'autor', 'filtrar'}))`
+     - `equiv = True` → **`confirmed_duplicate`**, **`auto_close = True`** (FALSO POSITIVO REPRODUZIDO).
+  2. **Exibir vs Ocultar conteúdo adulto (`"Preciso exibir conteúdo adulto na listagem."` vs `"Preciso ocultar conteúdo adulto na listagem."`):**
+     - `toks = (frozenset({'listagem', 'conteudo', 'adulto'}), frozenset({'listagem', 'ocultar', 'conteudo', 'adulto'}))`
+     - Como nenhum dos tokens integrava `_OBS_ACTION_OR_AXIS_TOKENS` e a sobreposição era `1.0` (`jaccard = 0.75`), retornou `equiv = True` → **`confirmed_duplicate`**, **`auto_close = True`** (SEGUNDO FALSO POSITIVO REPRODUZIDO).
+  3. Demais cenários contraditórios verificados na `v1.7.0`: `permitir_vs_bloquear_login` (`possible_duplicate`, `False`), `crescente_vs_decrescente` (`possible_duplicate`, `False`), `exigir_vs_dispensar_auth` (`possible_duplicate`, `False`), `obrigatorio_vs_opcional` (`possible_duplicate`, `False`) e `apenas_pt_vs_pt_e_en` (`no_match`, `False` por `existing_only_languages` indevido sem contexto de extensão já existente).
+
+### 6.2. Correção Implementada (`v1.7.1`)
+
+- [`scripts/duplicate_guard/models.py`](../scripts/duplicate_guard/models.py): atualização de `RULE_ENGINE_VERSION = "1.7.1"` para invalidar caches gerados com a semântica `1.7.0`.
+- [`scripts/duplicate_guard/matcher.py`](../scripts/duplicate_guard/matcher.py):
+  - Remoção de operadores semânticos (`com`, `sem`, `apenas`, `somente`, `obrigatorio`, `obrigatoria`, `permitir`, `permite`, `exibir`, `mostrar`, `incluir`, `inclua`, `incluam`, `adicionar`, `adicione`, `adicionem`) de `_OBS_BOILERPLATE_STOPWORDS`.
+  - Mapeamento canônico de negações (`nao`, `sem`, `nunca`, `jamais`, `nem`), acesso (`permitir` vs `bloquear`/`proibir`/`impedir`/`desativar`), visibilidade (`exibir`/`mostrar` vs `ocultar`/`esconder`/`omitir`), inclusão/exclusão (`com`/`incluir` vs `excluir`/`remover`), direção (`crescente`/`ascendente` vs `decrescente`/`descendente`), restrição (`apenas`/`somente`/`exclusivamente`/`unicamente`) e modalidade (`obrigatorio`/`exigir` vs `opcional`/`facultativo`/`dispensar`).
+  - Análise contextual por cláusula em `_extract_observation_requirement_tokens()`, emitindo marcadores dimensionais (`polarity:neg`, `neg:<alvo>`, `acesso:permitir`/`acesso:bloquear`, `visibilidade:exibir`/`visibilidade:ocultar`, `restricao:apenas`, `only:<alvo>`, `ordem:crescente`/`ordem:decrescente`, `modalidade:obrigatorio`/`modalidade:opcional`, `inclusao:excluir`), verificados estritamente em `_substantive_observations_equivalent()`.
+- [`scripts/duplicate_guard/normalize.py`](../scripts/duplicate_guard/normalize.py):
+  - Em `extract_language_context()`, `existing_only_languages` só é populado quando há contexto de extensão preexistente ou contraste com outro idioma desejado (mantendo `#143` íntegro e permitindo que `"apenas português"` vs `"português e inglês"` em `Nova extensão` seja retido como `possible_duplicate`, `should_auto_close=False`).
+  - Em `has_substantive_observations_text()`, reconhecimento ampliado de frases com negação, bloqueio, ocultação, exclusividade, direção e modalidade sem falsos positivos em agradecimentos puros.
+
+### 6.3. Reprodução Real Depois (`v1.7.1`, Simulação Offline)
+
+Resultados observados após a correção:
+- **Com filtro vs Sem filtro:** `toks = ({'filtrar', 'autor'}, {'autor', 'filtrar', 'neg:filtrar', 'polarity:neg', 'neg:autor'})`, `equiv = False` → **`possible_duplicate`**, **`auto_close = False`**.
+- **Permitir vs Bloquear login:** `toks = ({'acesso:permitir', 'login'}, {'login', 'polarity:neg', 'acesso:bloquear', 'neg:login'})`, `equiv = False` → **`possible_duplicate`**, **`auto_close = False`**.
+- **Exibir vs Ocultar adulto:** `toks = ({'adulto', 'visibilidade:exibir', 'conteudo'}, {'adulto', 'polarity:neg', 'visibilidade:ocultar', 'neg:conteudo', 'conteudo', 'neg:adulto'})`, `equiv = False` → **`possible_duplicate`**, **`auto_close = False`**.
+- **Apenas português vs Português e inglês:** `equiv = False` → **`possible_duplicate`**, **`auto_close = False`**.
+- **Ordenação crescente vs Decrescente:** `toks = ({'ordem:crescente', 'capitulo', 'ordenar'}, {'ordem:decrescente', 'capitulo', 'ordenar'})`, `equiv = False` → **`possible_duplicate`**, **`auto_close = False`**.
+- **Exigir vs Dispensar autenticação:** `equiv = False` → **`possible_duplicate`**, **`auto_close = False`**.
+- **Login obrigatório vs Opcional:** `toks = ({'modalidade:obrigatorio', 'login'}, {'login', 'modalidade:opcional'})`, `equiv = False` → **`possible_duplicate`**, **`auto_close = False`**.
+- **Paráfrases equivalentes (afirmativas e negativas) e duplicatas puras sem observações:** preservam `confirmed_duplicate` e `should_auto_close=True`.
+
+### 6.4. Testes, Benchmark e Publicação `v1.7.1`
+
+- **Suíte local completa (simulada):**
+  - `python3 -m compileall -q scripts tests`: exit code `0`.
+  - `pytest -q`: **`383 passed in 2.00s`** (373 anteriores preservados + 10 novos testes adversariais `test_v171_adv_01`..`10` em [`tests/test_v170_corrective_regressions.py`](../tests/test_v170_corrective_regressions.py)).
+  - `python3 -m unittest discover -s tests -v`: **`Ran 13 tests in 0.009s — OK`**.
+  - **Benchmark (`compute_metrics()` em [`tests/test_duplicate_guard_metrics.py`](../tests/test_duplicate_guard_metrics.py) — 98 casos):**
+    - `auto_close`: `tp=19`, **`fp=0`**, `fn=0`, `tn=79`, **`precision=1.0`**, **`recall=1.0`**.
+    - `alert_or_close`: `tp=49`, **`fp=0`**, `fn=0`, `tn=49`, **`precision=1.0`**, **`recall=1.0`**.
+    - `failures`: `[]`.
+- **Execuções de publicação e produção (`v1.7.1`):**
+  - Registradas logo após merge, `backfill`/`reconcile` protegidos, CodeQL e `reconcile` real pós-reativação.

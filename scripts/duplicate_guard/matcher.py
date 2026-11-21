@@ -83,22 +83,111 @@ _CANONICAL_REF_PATTERNS = (
 _OBS_BOILERPLATE_STOPWORDS = frozenset({
     "preciso", "precisa", "gostaria", "quero", "queria", "favor", "obrigado", "obrigada",
     "agradeco", "valeu", "por", "pela", "pelo", "pelos", "pelas", "para", "pra", "que",
-    "seja", "sejam", "fosse", "fossem", "ser", "ter", "tenha", "tenham", "com", "sem",
+    "seja", "sejam", "fosse", "fossem", "ser", "ter", "tenha", "tenham",
     "uma", "uns", "umas", "dos", "das", "nos", "nas", "aos", "isso", "esse", "essa",
     "este", "esta", "isto", "aqui", "ali", "extensao", "extensoes", "fonte", "fontes",
-    "site", "sites", "app", "aplicativo", "adicionar", "adicione", "adicionem",
-    "incluir", "inclua", "incluam", "implementar", "implemente", "implementem",
-    "suporte", "suportar", "permitir", "permite", "opcao", "opcoes", "funcao",
-    "funcionalidade", "funcionalidades", "recurso", "recursos", "requisito",
-    "requisitos", "possivel", "poder", "poderia", "deve", "devem", "devera",
-    "deveria", "necessario", "necessaria", "obrigatorio", "obrigatoria", "lista",
-    "listar", "listado", "listados", "listada", "listadas", "exibir", "mostrar",
-    "nome", "manga", "mangas", "anime", "animes", "webtoon", "webtoons", "novel",
-    "novels", "obra", "obras", "forma", "modo", "maneira", "fazer", "conseguir",
-    "tambem", "apenas", "somente", "onde", "como", "quando", "http", "https", "www",
+    "site", "sites", "app", "aplicativo", "implementar", "implemente", "implementem",
+    "suporte", "suportar", "opcao", "opcoes", "funcao", "funcionalidade",
+    "funcionalidades", "recurso", "recursos", "requisito", "requisitos",
+    "possivel", "poder", "poderia", "deve", "devem", "devera", "deveria",
+    "necessario", "necessaria", "lista", "listar", "listado", "listados",
+    "listada", "listadas", "nome", "manga", "mangas", "anime", "animes",
+    "webtoon", "webtoons", "novel", "novels", "obra", "obras", "forma", "modo",
+    "maneira", "fazer", "conseguir", "tambem", "onde", "como", "quando",
+    "http", "https", "www", "usuario", "usuarios", "acessar", "catalogo",
+    "listagem",
 })
 
 _OBS_CANONICAL_TOKEN_MAP = {
+    "nao": "nao",
+    "sem": "sem",
+    "nunca": "nunca",
+    "jamais": "jamais",
+    "nem": "nem",
+    "com": "com",
+    "apenas": "apenas",
+    "somente": "apenas",
+    "exclusivamente": "apenas",
+    "unicamente": "apenas",
+    "exclusivo": "apenas",
+    "exclusiva": "apenas",
+    "crescente": "crescente",
+    "ascendente": "crescente",
+    "decrescente": "decrescente",
+    "descendente": "decrescente",
+    "obrigatorio": "obrigatorio",
+    "obrigatoria": "obrigatorio",
+    "obrigatorios": "obrigatorio",
+    "obrigatorias": "obrigatorio",
+    "obrigatoriamente": "obrigatorio",
+    "exigir": "obrigatorio",
+    "exige": "obrigatorio",
+    "exigido": "obrigatorio",
+    "exigida": "obrigatorio",
+    "indispensavel": "obrigatorio",
+    "forcar": "obrigatorio",
+    "forcado": "obrigatorio",
+    "opcional": "opcional",
+    "opcionais": "opcional",
+    "opcionalmente": "opcional",
+    "facultativo": "opcional",
+    "facultativa": "opcional",
+    "dispensavel": "opcional",
+    "dispensar": "dispensar",
+    "dispensa": "dispensar",
+    "dispensado": "dispensar",
+    "dispensada": "dispensar",
+    "bloquear": "bloquear",
+    "bloqueia": "bloquear",
+    "bloqueado": "bloquear",
+    "bloqueada": "bloquear",
+    "bloqueio": "bloquear",
+    "proibir": "bloquear",
+    "proibido": "bloquear",
+    "proibida": "bloquear",
+    "impedir": "bloquear",
+    "desativar": "bloquear",
+    "desativado": "bloquear",
+    "desabilitar": "bloquear",
+    "desabilitado": "bloquear",
+    "permitir": "permitir",
+    "permite": "permitir",
+    "permitido": "permitir",
+    "permitida": "permitir",
+    "liberar": "permitir",
+    "liberado": "permitir",
+    "habilitar": "permitir",
+    "habilitado": "permitir",
+    "ativar": "permitir",
+    "ativado": "permitir",
+    "ocultar": "ocultar",
+    "oculta": "ocultar",
+    "oculto": "ocultar",
+    "ocultos": "ocultar",
+    "ocultas": "ocultar",
+    "esconder": "ocultar",
+    "esconde": "ocultar",
+    "escondido": "ocultar",
+    "escondida": "ocultar",
+    "omitir": "ocultar",
+    "remover": "excluir",
+    "removido": "excluir",
+    "excluir": "excluir",
+    "excluido": "excluir",
+    "exibir": "exibir",
+    "exibe": "exibir",
+    "exibindo": "exibir",
+    "mostrar": "exibir",
+    "mostra": "exibir",
+    "mostre": "exibir",
+    "mostrando": "exibir",
+    "incluir": "incluir",
+    "inclui": "incluir",
+    "incluindo": "incluir",
+    "adicionar": "incluir",
+    "adiciona": "incluir",
+    "adicione": "incluir",
+    "adicionem": "incluir",
     "ordenado": "ordenar",
     "ordenados": "ordenar",
     "ordenada": "ordenar",
@@ -173,6 +262,12 @@ _OBS_CANONICAL_TOKEN_MAP = {
     "scanlators": "scan",
     "scanlator": "scan",
     "status": "status",
+    "autenticacoes": "autenticacao",
+    "adultos": "adulto",
+    "adulta": "adulto",
+    "adultas": "adulto",
+    "conteudos": "conteudo",
+    "nsfw": "adulto",
 }
 
 _OBS_ACTION_OR_AXIS_TOKENS = frozenset({
@@ -181,13 +276,31 @@ _OBS_ACTION_OR_AXIS_TOKENS = frozenset({
     "recente", "avaliacao", "alfabetica", "alfabetico", "nota", "status",
     "idioma", "traducao", "volume", "scan", "capitulo", "episodio",
     "leitor", "download", "historico", "notificacao", "comentario",
-    "favorito", "login", "cadastro", "vip", "paywall", "nsfw",
+    "favorito", "login", "autenticacao", "cadastro", "vip", "paywall", "adulto",
+    "portugues", "ingles", "espanhol",
 })
 
 _OBS_NO_S_STRIP = frozenset({
     "portugues", "ingles", "frances", "japones", "chines", "status",
-    "apenas", "antes", "depois", "gratis", "simples",
+    "apenas", "antes", "depois", "gratis", "simples", "jamais",
 })
+
+_OBS_NEGATORS = frozenset({"nao", "sem", "nunca", "jamais", "nem"})
+_OBS_MODAL_MODIFIERS = frozenset({"obrigatorio", "opcional", "dispensar"})
+_OBS_DIRECTION_MODIFIERS = frozenset({"crescente", "decrescente"})
+_OBS_ACCESS_MODIFIERS = frozenset({"permitir", "bloquear"})
+_OBS_VISIBILITY_MODIFIERS = frozenset({"exibir", "ocultar"})
+_OBS_RESTRICTION_MODIFIERS = frozenset({"apenas"})
+_OBS_INCLUSION_MODIFIERS = frozenset({"com", "incluir", "excluir"})
+_OBS_OPERATOR_TOKENS = (
+    _OBS_NEGATORS
+    | _OBS_MODAL_MODIFIERS
+    | _OBS_DIRECTION_MODIFIERS
+    | _OBS_ACCESS_MODIFIERS
+    | _OBS_VISIBILITY_MODIFIERS
+    | _OBS_RESTRICTION_MODIFIERS
+    | _OBS_INCLUSION_MODIFIERS
+)
 
 
 def _canonicalize_obs_token(tok: str) -> str:
@@ -203,28 +316,145 @@ def _canonicalize_obs_token(tok: str) -> str:
 
 
 def _extract_observation_requirement_tokens(issue: ParsedIssue) -> frozenset[str]:
+    """Extract requirement base concepts plus contextual polarity/negation/restriction/modality markers."""
     raw_obs = (issue.notes or issue.additional_info or "").strip()
     if not raw_obs:
         return frozenset()
     norm = normalize_text(raw_obs, preserve_urls=False)
     if not norm:
         return frozenset()
+
     ext_tokens = set(issue.distinctive_tokens)
     tokens: set[str] = set()
-    for raw_tok in re.findall(r"[a-z0-9]{2,}", norm):
-        if raw_tok in ext_tokens:
+    clauses = re.split(r"[.;,!?\n]+|\b(?:mas|porem|contudo|entretanto)\b", norm)
+
+    for clause in clauses:
+        raw_words = re.findall(r"[a-z0-9]{2,}", clause)
+        if not raw_words:
             continue
-        canon = _canonicalize_obs_token(raw_tok)
-        if canon in _OBS_BOILERPLATE_STOPWORDS:
-            continue
-        if len(canon) < 3 and canon not in {"hd", "4k", "ui"}:
-            continue
-        tokens.add(canon)
+        canons: list[str] = []
+        for w in raw_words:
+            if w in ext_tokens:
+                continue
+            canon = _canonicalize_obs_token(w)
+            if canon in _OBS_BOILERPLATE_STOPWORDS:
+                continue
+            if len(canon) < 3 and canon not in {"hd", "4k", "ui"}:
+                continue
+            canons.append(canon)
+
+        n = len(canons)
+        for idx, tok in enumerate(canons):
+            prev_neg = any(canons[j] in _OBS_NEGATORS for j in range(max(0, idx - 2), idx))
+
+            if tok in _OBS_NEGATORS:
+                tokens.add("polarity:neg")
+                bound = 0
+                for j in range(idx + 1, min(n, idx + 5)):
+                    nxt = canons[j]
+                    if nxt in _OBS_NEGATORS:
+                        break
+                    if nxt not in _OBS_OPERATOR_TOKENS:
+                        tokens.add(f"neg:{nxt}")
+                        bound += 1
+                        if bound >= 3:
+                            break
+                continue
+
+            if tok == "obrigatorio":
+                if prev_neg:
+                    tokens.add("modalidade:opcional")
+                    tokens.add("polarity:neg")
+                else:
+                    tokens.add("modalidade:obrigatorio")
+                continue
+
+            if tok == "opcional":
+                if prev_neg:
+                    tokens.add("modalidade:obrigatorio")
+                else:
+                    tokens.add("modalidade:opcional")
+                continue
+
+            if tok == "dispensar":
+                tokens.add("polarity:neg")
+                tokens.add("modalidade:opcional")
+                for j in range(idx + 1, min(n, idx + 4)):
+                    nxt = canons[j]
+                    if nxt not in _OBS_OPERATOR_TOKENS:
+                        tokens.add(f"neg:{nxt}")
+                        break
+                continue
+
+            if tok in _OBS_DIRECTION_MODIFIERS:
+                if prev_neg:
+                    tokens.add("ordem:decrescente" if tok == "crescente" else "ordem:crescente")
+                else:
+                    tokens.add(f"ordem:{tok}")
+                continue
+
+            if tok == "permitir":
+                if prev_neg:
+                    tokens.add("acesso:bloquear")
+                    tokens.add("polarity:neg")
+                else:
+                    tokens.add("acesso:permitir")
+                continue
+
+            if tok == "bloquear":
+                tokens.add("acesso:bloquear")
+                tokens.add("polarity:neg")
+                for j in range(idx + 1, min(n, idx + 4)):
+                    nxt = canons[j]
+                    if nxt not in _OBS_OPERATOR_TOKENS:
+                        tokens.add(f"neg:{nxt}")
+                continue
+
+            if tok == "exibir":
+                if prev_neg:
+                    tokens.add("visibilidade:ocultar")
+                    tokens.add("polarity:neg")
+                else:
+                    tokens.add("visibilidade:exibir")
+                continue
+
+            if tok == "ocultar":
+                tokens.add("visibilidade:ocultar")
+                tokens.add("polarity:neg")
+                for j in range(idx + 1, min(n, idx + 4)):
+                    nxt = canons[j]
+                    if nxt not in _OBS_OPERATOR_TOKENS:
+                        tokens.add(f"neg:{nxt}")
+                continue
+
+            if tok == "excluir":
+                tokens.add("inclusao:excluir")
+                tokens.add("polarity:neg")
+                for j in range(idx + 1, min(n, idx + 4)):
+                    nxt = canons[j]
+                    if nxt not in _OBS_OPERATOR_TOKENS:
+                        tokens.add(f"neg:{nxt}")
+                continue
+
+            if tok in ("com", "incluir"):
+                # Neutral/affirmative inclusion when unnegated; negative handling already above when prev_neg
+                continue
+
+            if tok == "apenas":
+                tokens.add("restricao:apenas")
+                for j in range(idx + 1, min(n, idx + 3)):
+                    nxt = canons[j]
+                    if nxt not in _OBS_OPERATOR_TOKENS:
+                        tokens.add(f"only:{nxt}")
+                continue
+
+            tokens.add(tok)
+
     return frozenset(tokens)
 
 
 def _substantive_observations_equivalent(target: ParsedIssue, cand: ParsedIssue) -> bool:
-    """Return True only when substantive observation requirements match without conflicting scope or intent."""
+    """Return True only when substantive observation requirements match without conflicting polarity, scope, or intent."""
     if not target.has_substantive_observations and not cand.has_substantive_observations:
         return True
     if target.has_substantive_observations != cand.has_substantive_observations:
@@ -242,13 +472,23 @@ def _substantive_observations_equivalent(target: ParsedIssue, cand: ParsedIssue)
     req_c = _extract_observation_requirement_tokens(cand)
     if not req_t or not req_c:
         return False
-    if (req_t & _OBS_ACTION_OR_AXIS_TOKENS) != (req_c & _OBS_ACTION_OR_AXIS_TOKENS):
+
+    struct_t = frozenset(t for t in req_t if ":" in t)
+    struct_c = frozenset(t for t in req_c if ":" in t)
+    if struct_t != struct_c:
         return False
-    if req_t == req_c:
+
+    base_t = frozenset(t for t in req_t if ":" not in t)
+    base_c = frozenset(t for t in req_c if ":" not in t)
+    if not base_t or not base_c:
+        return False
+    if (base_t & _OBS_ACTION_OR_AXIS_TOKENS) != (base_c & _OBS_ACTION_OR_AXIS_TOKENS):
+        return False
+    if base_t == base_c:
         return True
-    jac = jaccard_similarity(req_t, req_c)
-    ovl = overlap_coefficient(req_t, req_c)
-    return (jac >= 0.75 and ovl >= 0.85) or (ovl == 1.0 and jac >= 0.65 and len(req_t & req_c) >= 2)
+    jac = jaccard_similarity(base_t, base_c)
+    ovl = overlap_coefficient(base_t, base_c)
+    return (jac >= 0.75 and ovl >= 0.85) or (ovl == 1.0 and jac >= 0.65 and len(base_t & base_c) >= 2)
 
 
 def _parse_iso_dt(raw_ts: str | None) -> datetime:
