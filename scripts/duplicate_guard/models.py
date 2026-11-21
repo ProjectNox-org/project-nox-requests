@@ -5,12 +5,13 @@
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
 from typing import Literal
 
 Classification = Literal["no_match", "possible_duplicate", "confirmed_duplicate"]
 
-RULE_ENGINE_VERSION = "1.3.0"
+RULE_ENGINE_VERSION = "1.4.0"
 
 INTENT_CREATE_EXTENSION = "create_extension"
 INTENT_BUG_FIX = "bug_fix"
@@ -209,6 +210,9 @@ class ParsedIssue:
     has_substantive_observations: bool = False
     has_regression_signal: bool = False
     specific_work_hint: str = ""
+    mentioned_chapters: frozenset[str] = frozenset()
+    mentioned_episodes: frozenset[str] = frozenset()
+    api_endpoints: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -232,10 +236,10 @@ class CatalogExtension:
         valid_catalog_langs = {lang for lang in self.languages if not lang.startswith("unknown:")}
         if not valid_catalog_langs:
             return False
+        if not requested:
+            return False
         if any(lang.startswith("unknown:") for lang in requested):
             return False
-        if not requested:
-            return "all" in valid_catalog_langs
         if "all" in requested:
             return "all" in valid_catalog_langs
         if "all" in valid_catalog_langs:
@@ -301,25 +305,39 @@ class ExtensionCatalog:
                     found.append(ext)
         return tuple(found)
 
+    def digest(self) -> str:
+        """Return a stable 16-char digest of catalog entries for cache invalidation."""
+        if not self.extensions:
+            return "empty"
+        rows = sorted(
+            (
+                ext.catalog_repo,
+                ext.ext_type,
+                ext.pkg,
+                ext.version,
+                ",".join(sorted(ext.languages)),
+                ",".join(sorted(ext.domains)),
+            )
+            for ext in self.extensions
+        )
+        raw = "|".join(":".join(r) for r in rows)
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
     @staticmethod
     def _name_compatible(target: ParsedIssue, ext: CatalogExtension) -> bool:
+        from .normalize import levenshtein_ratio
+
         t_name = target.compact_name
         e_name = ext.compact_name
         if not t_name or not e_name:
-            return bool(target.url and target.url.identity_key in ext.domains)
+            return False
         if t_name == e_name or t_name in e_name or e_name in t_name:
             return True
-        if target.url and target.url.host_stem and len(target.url.host_stem) >= 4:
+        if target.url and target.url.host_stem and len(target.url.host_stem) >= 5:
             if target.url.host_stem in e_name and target.url.host_stem in t_name:
-                return True
-        # Character bigram Dice similarity for minor typos (e.g. WachtAnimeHentai vs WatchAnimeHentai)
-        if len(t_name) >= 2 and len(e_name) >= 2:
-            a_bg = {t_name[i : i + 2] for i in range(len(t_name) - 1)}
-            b_bg = {e_name[i : i + 2] for i in range(len(e_name) - 1)}
-            overlap = (2.0 * len(a_bg & b_bg)) / (len(a_bg) + len(b_bg))
-            if overlap >= 0.60:
-                return True
-        return False
+                if levenshtein_ratio(t_name, e_name) >= 0.72:
+                    return True
+        return levenshtein_ratio(t_name, e_name) >= 0.80
 
 
 @dataclass(frozen=True)

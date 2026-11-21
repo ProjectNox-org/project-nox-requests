@@ -273,7 +273,7 @@ class GitHubClient:
                         return [item for item in parsed if isinstance(item, dict)]
         return []
 
-    def list_catalog_extensions(self) -> dict[str, list[dict[str, Any]]]:
+    def list_catalog_extensions(self, *, strict: bool = False) -> dict[str, list[dict[str, Any]]]:
         """Load published extension indexes from manga-extensoes and anime-extensoes safely."""
         catalog: dict[str, list[dict[str, Any]]] = {"manga": [], "anime": []}
         targets = (
@@ -283,6 +283,10 @@ class GitHubClient:
         for key, slug in targets:
             try:
                 catalog[key] = self.fetch_catalog_json(slug, "index.min.json")
-            except (GitHubApiError, ValueError, json.JSONDecodeError):
+            except RateLimitError:
+                raise
+            except (GitHubApiError, PermissionDeniedError, ValueError, json.JSONDecodeError):
+                if strict:
+                    raise
                 catalog[key] = []
         return catalog

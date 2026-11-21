@@ -29,6 +29,7 @@ from scripts.duplicate_guard.cli import build_duplicate_links, parse_corpus, run
 from scripts.duplicate_guard.config import load_config  # noqa: E402
 from scripts.duplicate_guard.github_client import (  # noqa: E402
     DryRunWriteBlockedError,
+    GitHubApiError,
     GitHubClient,
     PermissionDeniedError,
     RateLimitError,
@@ -80,9 +81,15 @@ def load_real_fixtures() -> dict[int, RawIssue]:
 
 
 class InMemoryGitHubApi:
-    """Stateful mock GitHub API tracking comments, labels, closures, and failures."""
+    """Stateful mock GitHub API tracking comments, labels, closures, live catalog, and failures."""
 
-    def __init__(self, issues: list[RawIssue], initial_comments: dict[int, list[dict]] | None = None) -> None:
+    def __init__(
+        self,
+        issues: list[RawIssue],
+        initial_comments: dict[int, list[dict]] | None = None,
+        *,
+        catalog_payload: dict[str, list[dict[str, Any]]] | None = None,
+    ) -> None:
         self.issues: dict[int, dict[str, Any]] = {}
         for r in issues:
             self.issues[r.number] = {
@@ -100,6 +107,47 @@ class InMemoryGitHubApi:
                 "comments": r.comments_count,
             }
         self.comments: dict[int, list[dict]] = {k: list(v) for k, v in (initial_comments or {}).items()}
+        self.catalog_payload: dict[str, list[dict[str, Any]]] = (
+            catalog_payload
+            if catalog_payload is not None
+            else {
+                "anime": [
+                    {
+                        "name": "Aniyomi: HentaiHaven",
+                        "pkg": "eu.kanade.tachiyomi.animeextension.en.hentaihaven",
+                        "apk": "aniyomi-en.hentaihaven-v16.15.apk",
+                        "lang": "en",
+                        "version": "16.15",
+                        "sources": [{"name": "HentaiHaven", "lang": "en", "baseUrl": "https://hentaihaven.xxx"}],
+                    },
+                    {
+                        "name": "Aniyomi: ExistingAnime",
+                        "pkg": "eu.kanade.tachiyomi.animeextension.pt.existinganime",
+                        "apk": "aniyomi-pt.existinganime-v16.1.apk",
+                        "lang": "pt-BR",
+                        "version": "16.1",
+                        "sources": [{"name": "ExistingAnime", "lang": "pt-BR", "baseUrl": "https://existinganime.tv"}],
+                    },
+                ],
+                "manga": [
+                    {
+                        "name": "Bakai",
+                        "pkg": "eu.kanade.tachiyomi.extension.pt.bakai",
+                        "apk": "tachiyomi-pt.bakai-v1.6.25.apk",
+                        "lang": "pt-BR",
+                        "version": "1.6.25",
+                        "sources": [{"name": "Bakai", "lang": "pt-BR", "baseUrl": "https://bakai.org"}],
+                    },
+                    {
+                        "name": "SoloCat",
+                        "pkg": "p.solocat",
+                        "lang": "pt-BR",
+                        "version": "1.0",
+                        "sources": [{"name": "SoloCat", "lang": "pt-BR", "baseUrl": "https://solocat.com"}],
+                    },
+                ],
+            }
+        )
         self.next_comment_id = 5000
         self.writes: list[tuple[str, int, Any]] = []
         self.fail_on: dict[str, Exception] = {}
@@ -179,6 +227,35 @@ class InMemoryGitHubApi:
         self.issues[issue_number]["state_reason"] = state_reason
         self.writes.append(("close_issue", issue_number, state_reason))
         return dict(self.issues[issue_number])
+
+    def fetch_catalog_json(self, repo_slug: str, path: str = "index.min.json") -> list[dict[str, Any]]:
+        self.api_calls_made += 1
+        if "fetch_catalog_json" in self.fail_on:
+            raise self.fail_on["fetch_catalog_json"]
+        if repo_slug == "ProjectNox-org/manga-extensoes":
+            return [dict(item) for item in self.catalog_payload.get("manga", [])]
+        if repo_slug == "ProjectNox-org/anime-extensoes":
+            return [dict(item) for item in self.catalog_payload.get("anime", [])]
+        raise ValueError(f"Unsupported catalog repository: {repo_slug}")
+
+    def list_catalog_extensions(self, *, strict: bool = False) -> dict[str, list[dict[str, Any]]]:
+        if "list_catalog_extensions" in self.fail_on:
+            self.api_calls_made += 1
+            exc = self.fail_on["list_catalog_extensions"]
+            if isinstance(exc, RateLimitError) or strict:
+                raise exc
+            return {"manga": [], "anime": []}
+        result: dict[str, list[dict[str, Any]]] = {"manga": [], "anime": []}
+        for key, slug in (("manga", "ProjectNox-org/manga-extensoes"), ("anime", "ProjectNox-org/anime-extensoes")):
+            try:
+                result[key] = self.fetch_catalog_json(slug, "index.min.json")
+            except RateLimitError:
+                raise
+            except (GitHubApiError, PermissionDeniedError, ValueError):
+                if strict:
+                    raise
+                result[key] = []
+        return result
 
 
 def evaluate_pair(raw_list: list[RawIssue], target_num: int, cfg: GuardConfig | None = None):

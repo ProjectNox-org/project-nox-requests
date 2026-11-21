@@ -11,10 +11,13 @@ from dataclasses import replace
 from typing import TYPE_CHECKING, Protocol
 
 from .github_client import GitHubApiError, PermissionDeniedError, RateLimitError
-from .matcher import evaluate_comment_clarifications
+from .matcher import DuplicateMatcher, evaluate_comment_clarifications
 from .models import (
+    ALL_CATEGORIES,
+    CATEGORY_NEW_EXTENSION,
     HUMAN_INTERVENTION_LABELS,
     INCOMPATIBLE_STATUS_LABELS_ON_DUPLICATE,
+    INTENT_CREATE_EXTENSION,
     LABEL_DONE,
     LABEL_DUPLICATE,
     MAINTAINER_OVERRIDE_LABELS,
@@ -23,16 +26,15 @@ from .models import (
     TRUSTED_AUTHOR_ASSOCIATIONS,
     TRUSTED_BOT_LOGINS,
     ActionResult,
+    CatalogExtension,
+    ExtensionCatalog,
     GuardConfig,
     GuardDecision,
     ParsedIssue,
     RawIssue,
 )
 from .normalize import sanitize_for_markdown
-from .parser import parse_issue
-
-if TYPE_CHECKING:
-    from .matcher import DuplicateMatcher
+from .parser import parse_catalog_entries, parse_issue
 
 MARKER_PREFIX = "<!-- nox-duplicate-guard:v1"
 _MARKER_RE = re.compile(
@@ -327,6 +329,118 @@ class GuardActionExecutor:
             else frozenset()
         )
 
+    def _verify_live_catalog_fulfillment(
+        self,
+        live_parsed: ParsedIssue,
+    ) -> tuple[bool, str | None, CatalogExtension | None]:
+        """Confirm live official catalog publication directly before closing already_fulfilled_creation."""
+        if live_parsed.category != CATEGORY_NEW_EXTENSION:
+            return False, "live_catalog_invalid_category", None
+        if live_parsed.ext_type not in ("Mangá", "Anime"):
+            return False, "live_catalog_missing_ext_type", None
+        if not (live_parsed.url and live_parsed.url.is_valid_domain and live_parsed.compact_name):
+            return False, "live_catalog_incomplete_issue_identity", None
+        if not live_parsed.target_languages or any(l.startswith("unknown:") for l in live_parsed.target_languages):
+            return False, "live_catalog_unverified_language", None
+        if (
+            live_parsed.semantic_intent != INTENT_CREATE_EXTENSION
+            or live_parsed.extension_already_exists
+            or live_parsed.category_mismatch
+            or live_parsed.has_substantive_observations
+            or bool(live_parsed.symptom_topics)
+            or bool(live_parsed.error_signatures - {"cloudflare"})
+        ):
+            return False, "live_catalog_non_pure_creation", None
+
+        target_repo = (
+            "ProjectNox-org/manga-extensoes"
+            if live_parsed.ext_type == "Mangá"
+            else "ProjectNox-org/anime-extensoes"
+        )
+        raw_entries: list[dict] | None = None
+        if hasattr(self.client, "fetch_catalog_json"):
+            try:
+                raw_entries = self.client.fetch_catalog_json(target_repo, "index.min.json")  # type: ignore[attr-defined]
+            except RateLimitError:
+                raise
+            except (PermissionDeniedError, GitHubApiError, ValueError, TypeError) as exc:
+                return False, f"live_catalog_fetch_failed:{exc}", None
+            except Exception as exc:
+                return False, f"live_catalog_fetch_failed:{exc}", None
+        elif hasattr(self.client, "list_catalog_extensions"):
+            try:
+                payload = self.client.list_catalog_extensions(strict=True)  # type: ignore[attr-defined]
+            except TypeError:
+                try:
+                    payload = self.client.list_catalog_extensions()  # type: ignore[attr-defined]
+                except RateLimitError:
+                    raise
+                except Exception as exc:
+                    return False, f"live_catalog_fetch_failed:{exc}", None
+            except RateLimitError:
+                raise
+            except Exception as exc:
+                return False, f"live_catalog_fetch_failed:{exc}", None
+            key = "manga" if live_parsed.ext_type == "Mangá" else "anime"
+            raw_entries = (payload or {}).get(key) if isinstance(payload, dict) else None
+        else:
+            return False, "live_catalog_client_unsupported", None
+
+        if not isinstance(raw_entries, list):
+            return False, "live_catalog_invalid_payload", None
+
+        live_entries = parse_catalog_entries(raw_entries, live_parsed.ext_type, target_repo)
+        live_catalog = ExtensionCatalog(live_entries)
+        matches = live_catalog.find_matching_extensions(live_parsed)
+        covering = [
+            ext
+            for ext in matches
+            if ext.pkg and ext.name and ext.domains and ext.supports_languages(live_parsed.target_languages)
+        ]
+        if not covering:
+            return False, "live_catalog_extension_missing_or_language_mismatch", None
+        unique_pkgs = {ext.pkg for ext in covering}
+        if len(unique_pkgs) != 1:
+            return False, "live_catalog_ambiguous_multiple_packages", None
+        return True, None, covering[0]
+
+    def _downgrade_unverified_catalog_decision(
+        self,
+        live_parsed: ParsedIssue,
+        decision: GuardDecision,
+        reason: str,
+    ) -> GuardDecision:
+        if self.matcher is not None:
+            no_cat_matcher = DuplicateMatcher(
+                list(self.matcher.by_number.values()),
+                self.config,
+                duplicate_links=self.matcher.duplicate_links,
+                catalog=ExtensionCatalog(),
+            )
+            fallback = no_cat_matcher.evaluate(live_parsed)
+            if fallback.classification == "confirmed_duplicate" and fallback.should_auto_close:
+                return fallback
+            return replace(
+                fallback,
+                should_auto_close=False,
+                blocked_reason=reason,
+                reasons=(
+                    *fallback.reasons,
+                    f"Revalidação ao vivo do catálogo oficial impediu encerramento automático ({reason}).",
+                ),
+            )
+        new_cls = "possible_duplicate" if decision.canonical_issue is not None else "no_match"
+        return replace(
+            decision,
+            classification=new_cls,  # type: ignore[arg-type]
+            should_auto_close=False,
+            blocked_reason=reason,
+            reasons=(
+                *decision.reasons,
+                f"Revalidação ao vivo do catálogo oficial impediu encerramento automático ({reason}).",
+            ),
+        )
+
     def _fetch_live_canonical(self, canonical_num: int | None) -> tuple[RawIssue | None, str | None]:
         """Fetch live canonical issue state, distinguishing rate limits from 404/inaccessible issues."""
         if canonical_num is None:
@@ -461,6 +575,22 @@ class GuardActionExecutor:
                     ),
                 )
 
+        # Live catalog confirmation when auto-close depends on already_fulfilled_creation
+        if (
+            active_decision.classification == "confirmed_duplicate"
+            and active_decision.match_kind == "already_fulfilled_creation"
+            and active_decision.should_auto_close
+        ):
+            cat_ok, cat_reason, cat_ext = self._verify_live_catalog_fulfillment(live_parsed)
+            if not cat_ok or cat_ext is None:
+                active_decision = self._downgrade_unverified_catalog_decision(
+                    live_parsed,
+                    active_decision,
+                    cat_reason or "live_catalog_unverified",
+                )
+            else:
+                active_decision = replace(active_decision, catalog_extension=cat_ext.to_summary_dict())
+
         return active_decision, live_parsed, canon_parsed, ("live_revalidated" if (target_edited or canon_changed) else None)
 
     def _verify_concurrent_barrier(
@@ -510,6 +640,14 @@ class GuardActionExecutor:
         )
         if clarif_blocked:
             return False, f"clarification_added_during_execution:{clarif_reason}", fresh_raw
+
+        if decision.match_kind == "already_fulfilled_creation":
+            try:
+                cat_ok, cat_reason, _ = self._verify_live_catalog_fulfillment(fresh_parsed)
+            except RateLimitError as rl_exc:
+                return False, f"GitHub API rate limit during live catalog recheck: {rl_exc}", fresh_raw
+            if not cat_ok:
+                return False, f"catalog_changed_before_close:{cat_reason}", fresh_raw
 
         if decision.match_kind != "already_fulfilled_creation" and decision.canonical_issue is not None:
             fresh_canon, canon_err = self._fetch_live_canonical(decision.canonical_issue)
@@ -811,7 +949,7 @@ class GuardActionExecutor:
             # Recompute based on latest issue state in API if possible
             try:
                 latest_mid = RawIssue.from_github_dict(self.client.get_issue(num))
-                downgraded_dec, mode_after = self._downgrade_decision_on_live_abort(decision, latest_mid)
+                downgraded_dec, mode_after = self._downgrade_decision_on_live_abort(decision, latest_mid, mid_reason)
             except (RateLimitError, PermissionDeniedError, GitHubApiError):
                 downgraded_dec = replace(decision, classification="possible_duplicate", should_auto_close=False, blocked_reason=mid_reason)
                 mode_after = "commented"
@@ -867,7 +1005,7 @@ class GuardActionExecutor:
                     partial_errors.append(f"rollback_label:{rb_exc}")
             try:
                 latest_pre = RawIssue.from_github_dict(self.client.get_issue(num))
-                downgraded_dec, mode_after = self._downgrade_decision_on_live_abort(decision, latest_pre)
+                downgraded_dec, mode_after = self._downgrade_decision_on_live_abort(decision, latest_pre, pre_reason)
             except (RateLimitError, PermissionDeniedError, GitHubApiError):
                 downgraded_dec = replace(decision, classification="possible_duplicate", should_auto_close=False, blocked_reason=pre_reason)
                 mode_after = "commented"
@@ -947,7 +1085,28 @@ class GuardActionExecutor:
         self,
         decision: GuardDecision,
         latest_raw: RawIssue | None,
+        abort_reason: str | None = None,
     ) -> tuple[GuardDecision, str]:
+        if abort_reason and "catalog_changed_before_close:" in abort_reason:
+            if decision.canonical_issue is None:
+                return (
+                    replace(
+                        decision,
+                        classification="no_match",
+                        should_auto_close=False,
+                        blocked_reason=abort_reason,
+                    ),
+                    "cleared",
+                )
+            return (
+                replace(
+                    decision,
+                    classification="possible_duplicate",
+                    should_auto_close=False,
+                    blocked_reason=abort_reason,
+                ),
+                "commented",
+            )
         if latest_raw is not None and self.matcher is not None:
             latest_parsed = parse_issue(latest_raw, known_extensions=self._known_extensions)
             if latest_parsed.content_fingerprint != decision.fingerprint:

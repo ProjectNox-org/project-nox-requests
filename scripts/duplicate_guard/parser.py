@@ -26,6 +26,9 @@ from .normalize import (
     detect_extension_already_exists,
     detect_regression_signal,
     distinctive_name_tokens,
+    extract_api_endpoints,
+    extract_chapter_numbers,
+    extract_episode_numbers,
     extract_error_signatures,
     extract_feature_and_symptom_topics,
     extract_language_context,
@@ -239,10 +242,11 @@ def _detect_ext_type(raw: RawIssue, sections: dict[str, str]) -> str | None:
 _FREE_TEXT_PART_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("reader", re.compile(r"\b(?:no\s+leitor|ao\s+abrir\s+(?:o\s+)?leitor|abre\s+o\s+leitor|paginas?\s+nao\s+carregam?|no\s+pages\s+found|ler\s+(?:os?\s+|algum\s+)?capitulo|imagens?\s+(?:nao\s+carregam|em\s+branco|quebradas))\b", re.I)),
     ("login", re.compile(r"\b(?:fazer\s+login|no\s+login|erro\s+(?:de|no)\s+login|autentic\w*|minha\s+conta|fazer\s+cadastro|logar\s+na\s+conta)\b", re.I)),
-    ("chapters", re.compile(r"\b(?:baixar\s+capitulos?|download\s+(?:de|dos)\s+capitulos?|lista\s+de\s+capitulos?|olhar\s+(?:os\s+)?capitulos?|nenhum\s+capitulo|faltando\s+capitulos?|ao\s+baixar)\b", re.I)),
-    ("search", re.compile(r"\b(?:na\s+busca|na\s+pesquisa|ao\s+(?:buscar|pesquisar)|pesquisa\s+nao\s+retorna|busca\s+quebrada|filtros?\s+de\s+busca)\b", re.I)),
-    ("catalog", re.compile(r"\b(?:no\s+catalogo|aba\s+(?:popular|recentes)|listagem\s+inicial|tela\s+inicial)\b", re.I)),
-    ("video", re.compile(r"\b(?:reproduzir\s+(?:video|episodio)|no\s+player|video\s+nao\s+carrega|episodios?\s+nao\s+reproduz)\b", re.I)),
+    ("chapters", re.compile(r"\b(?:baixar\s+capitulos?|download\s+(?:de|dos)\s+capitulos?|lista(?:gem)?\s+de\s+capitulos?|nao\s+aparece(?:m)?\s+na\s+listagem|olhar\s+(?:os\s+)?capitulos?|nenhum\s+capitulo|faltando\s+capitulos?|ao\s+baixar|/chapters?)\b", re.I)),
+    ("search", re.compile(r"\b(?:na\s+busca|na\s+pesquisa|ao\s+(?:buscar|pesquisar)|pesquisa\s+nao\s+retorna|busca\s+quebrada|filtros?\s+de\s+busca|/search)\b", re.I)),
+    ("catalog", re.compile(r"\b(?:no\s+catalogo|aba\s+(?:popular|recentes)|listagem\s+inicial|tela\s+inicial|populares)\b", re.I)),
+    ("metadata", re.compile(r"\b(?:imagens?\s+de\s+capa|capas?\s+(?:incorretas?|erradas?|nao\s+carregam|quebradas?)|metadados?\s+(?:errad[oa]s?|incorret[oa]s?)|sinopse|informacoes\s+das\s+obras)\b", re.I)),
+    ("video", re.compile(r"\b(?:reproduzir\s+(?:video|episodio)|no\s+player|video\s+nao\s+carrega|episodios?\s+(?:\d+\s+)?nao\s+reproduz|/episodes?)\b", re.I)),
     ("install", re.compile(r"\b(?:nao\s+instala|erro\s+ao\s+(?:instalar|atualizar)\s+(?:a\s+)?extensao)\b", re.I)),
 )
 
@@ -418,6 +422,32 @@ def parse_issue(raw: RawIssue, known_extensions: frozenset[str] = frozenset()) -
         p for p in (title_symptom, sections.get("summary", ""), sections.get("description", ""), reproduction, additional_info) if p
     )
     error_sigs, tech_tokens = extract_error_signatures(combined_symptom_text)
+    if not version_tuple and category == CATEGORY_BUG:
+        ver_m = re.search(
+            r"\b(?:(?:na\s+)?vers(?:ao|ion)\s*:?\s*v?|v)(\d+\.\d+(?:\.\d+)+)\b",
+            normalize_text(combined_symptom_text, preserve_urls=False),
+            flags=re.IGNORECASE,
+        )
+        if ver_m:
+            version_raw = ver_m.group(1)
+            version_tuple = parse_version(version_raw)
+
+    # Filter extension's own hostname from technical_tokens unless failure is an explicit DNS/NXDOMAIN error
+    if "nxdomain_dns" not in error_sigs:
+        filtered_tech: set[str] = set()
+        for tok in tech_tokens:
+            if tok.startswith("host:"):
+                host_val = tok.split(":", 1)[1]
+                host_compact = compact_name(host_val)
+                if url_obj and url_obj.registrable_domain and (
+                    host_val == url_obj.registrable_domain or host_val.endswith("." + url_obj.registrable_domain)
+                ):
+                    continue
+                if compact and len(compact) >= 4 and compact in host_compact:
+                    continue
+            filtered_tech.add(tok)
+        tech_tokens = frozenset(filtered_tech)
+
     all_text_tokens = tokenize(combined_symptom_text)
 
     declared_code, mentioned_langs, target_langs, existing_only_langs = extract_language_context(
@@ -428,7 +458,10 @@ def parse_issue(raw: RawIssue, known_extensions: frozenset[str] = frozenset()) -
     ext_already_exists = detect_extension_already_exists(free_intent_text)
     feature_topics, symptom_topics = extract_feature_and_symptom_topics(free_intent_text)
     has_reg_signal = detect_regression_signal(free_intent_text)
-    specific_work_hint = extract_specific_work_hint(title_symptom, description)
+    specific_work_hint = extract_specific_work_hint(title_symptom, description, extension_name=name)
+    mentioned_chapters = extract_chapter_numbers(combined_symptom_text)
+    mentioned_episodes = extract_episode_numbers(combined_symptom_text)
+    api_endpoints = extract_api_endpoints(combined_symptom_text)
     dead_ev = classify_dead_source_evidence(free_intent_text)
 
     semantic_intent, secondary_intents, inferred_cat, cat_mismatch = infer_semantic_intent(
@@ -481,6 +514,10 @@ def parse_issue(raw: RawIssue, known_extensions: frozenset[str] = frozenset()) -
         ",".join(sorted(target_langs)),
         ",".join(sorted(existing_only_langs)),
         ",".join(sorted(affected_parts)),
+        specific_work_hint,
+        ",".join(sorted(mentioned_chapters)),
+        ",".join(sorted(mentioned_episodes)),
+        ",".join(sorted(api_endpoints)),
         normalize_text(f"{title_symptom} {description} {additional_info}", preserve_urls=True),
         related_ext_compact,
     ]
@@ -531,6 +568,9 @@ def parse_issue(raw: RawIssue, known_extensions: frozenset[str] = frozenset()) -
         has_substantive_observations=has_obs,
         has_regression_signal=has_reg_signal,
         specific_work_hint=specific_work_hint,
+        mentioned_chapters=mentioned_chapters,
+        mentioned_episodes=mentioned_episodes,
+        api_endpoints=api_endpoints,
     )
 
 

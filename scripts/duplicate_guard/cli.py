@@ -18,6 +18,7 @@ from .config import DEFAULT_CONFIG_PATH, load_config
 from .github_client import GitHubApiError, GitHubClient, PermissionDeniedError, RateLimitError
 from .matcher import DuplicateMatcher, extract_canonical_reference
 from .models import (
+    CATEGORY_NEW_EXTENSION,
     LABEL_DUPLICATE,
     RULE_ENGINE_VERSION,
     ExtensionCatalog,
@@ -219,8 +220,15 @@ def _prune_cache(state: dict, open_numbers: set[int], all_numbers: set[int]) -> 
         }
 
 
-def _has_valid_cache_entry(entry: dict | None, target: ParsedIssue, config: GuardConfig) -> bool:
+def _has_valid_cache_entry(
+    entry: dict | None,
+    target: ParsedIssue,
+    config: GuardConfig,
+    catalog_digest: str = "",
+) -> bool:
     if not isinstance(entry, dict):
+        return False
+    if target.category == CATEGORY_NEW_EXTENSION and entry.get("catalog_digest") != catalog_digest:
         return False
     return (
         entry.get("updated_at") == target.raw.updated_at
@@ -237,6 +245,7 @@ def _is_cache_hit(
     canonical_issue: int | None,
     config: GuardConfig,
     issues_by_num: dict[int, RawIssue],
+    catalog_digest: str = "",
 ) -> bool:
     if not isinstance(entry, dict):
         return False
@@ -245,6 +254,8 @@ def _is_cache_hit(
     if entry.get("fingerprint") != target.content_fingerprint:
         return False
     if entry.get("auto_close_enabled") != config.auto_close_enabled:
+        return False
+    if target.category == CATEGORY_NEW_EXTENSION and entry.get("catalog_digest") != catalog_digest:
         return False
     if entry.get("decision") != decision_cls:
         return False
@@ -410,6 +421,7 @@ def run_cli(argv: list[str] | None = None, *, client_override: object | None = N
         if can_persist_cache:
             _save_cache(cache_path, cache_state)
         return _abort_api_error(args, exc, args.summary_file)
+    catalog_digest = catalog.digest()
     matcher = DuplicateMatcher(parsed_list, config, duplicate_links=dup_links, catalog=catalog)
 
     effective_mode = args.mode
@@ -448,7 +460,7 @@ def run_cli(argv: list[str] | None = None, *, client_override: object | None = N
             if (
                 _parse_iso(p.raw.created_at) >= cutoff
                 or _parse_iso(p.raw.updated_at) >= cutoff
-                or not _has_valid_cache_entry(cached_entry, p, config)
+                or not _has_valid_cache_entry(cached_entry, p, config, catalog_digest)
             ):
                 target_numbers.append(p.raw.number)
 
@@ -477,6 +489,7 @@ def run_cli(argv: list[str] | None = None, *, client_override: object | None = N
                 decision.canonical_issue,
                 config,
                 issues_by_num,
+                catalog_digest,
             ):
                 skipped_cached_count += 1
                 report_rows.append({
@@ -548,6 +561,7 @@ def run_cli(argv: list[str] | None = None, *, client_override: object | None = N
             cache_state["evaluated"][str(num)] = {
                 "updated_at": target_parsed.raw.updated_at,
                 "fingerprint": target_parsed.content_fingerprint,
+                "catalog_digest": catalog_digest,
                 "auto_close_enabled": config.auto_close_enabled,
                 "decision": eff_cls,
                 "canonical_issue": eff_canon,
@@ -641,6 +655,7 @@ def run_cli(argv: list[str] | None = None, *, client_override: object | None = N
         "dry_run": config.dry_run,
         "auto_close_enabled": config.auto_close_enabled,
         "rule_version": RULE_ENGINE_VERSION,
+        "catalog_digest": catalog_digest,
         "total_open_issues": total_open_issues,
         "evaluated_count": len(report_rows),
         "processed_via_api_count": processed_api_batch,

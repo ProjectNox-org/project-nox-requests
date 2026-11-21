@@ -313,6 +313,66 @@ def build_labeled_cases():
             _mk(6006, "[Problema na extensão]: FonteY — Nenhuma página", "### Tipo de extensão\nMangá\n### Nome da extensão\nFonteY\n### Parte afetada\nCapítulos\n### O que está acontecendo?\nErro No pages found ao abrir capítulo.\n", ["Problema na extensão", "Mangá"], created_at="2026-11-02T10:00:00Z"),
             False, False,
         ),
+        (
+            "v140_bug_neg_same_host_cover_vs_metadata", "bug",
+            _mk(7001, "[Problema na extensão]: Sushi Manga — Capas não carregam", "### Tipo de extensão\nMangá\n### Nome da extensão\nSushi Manga\n### Versão da extensão\n1.4.2\n### Parte afetada\nLeitor / Imagens\n### O que está acontecendo?\nAs capas das obras em https://sushimanga.com.br não aparecem na tela.\n", ["Problema na extensão", "Mangá"]),
+            _mk(7002, "[Problema na extensão]: Sushi Manga — Sinopse e título errados", "### Tipo de extensão\nMangá\n### Nome da extensão\nSushi Manga\n### Versão da extensão\n1.4.2\n### Parte afetada\nOutro\n### O que está acontecendo?\nA sinopse e o título das obras em https://sushimanga.com.br vêm errados.\n", ["Problema na extensão", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            False, False,
+        ),
+        (
+            "v140_bug_neg_same_host_timeout_vs_json", "bug",
+            _mk(7003, "[Problema na extensão]: Sushi Manga — Timeout na API", "### Tipo de extensão\nMangá\n### Nome da extensão\nSushi Manga\n### Versão da extensão\n1.4.2\n### Parte afetada\nCapítulos\n### O que está acontecendo?\nTimeout ao carregar https://api.sushimanga.com.br/chapters\n", ["Problema na extensão", "Mangá"]),
+            _mk(7004, "[Problema na extensão]: Sushi Manga — JSON inválido", "### Tipo de extensão\nMangá\n### Nome da extensão\nSushi Manga\n### Versão da extensão\n1.4.2\n### Parte afetada\nBusca / Filtros\n### O que está acontecendo?\nResposta JSON inválida em https://api.sushimanga.com.br/search\n", ["Problema na extensão", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            False, False,
+        ),
+        (
+            "v140_bug_neg_generic_ioexception_diff_context", "bug",
+            _mk(7005, "[Problema na extensão]: Sushi Manga — IOException capítulo", "### Tipo de extensão\nMangá\n### Nome da extensão\nSushi Manga\n### Versão da extensão\n1.4.2\n### Parte afetada\nLeitor / Imagens\n### O que está acontecendo?\njava.io.IOException ao baixar imagens do capítulo.\n", ["Problema na extensão", "Mangá"]),
+            _mk(7006, "[Problema na extensão]: Sushi Manga — IOException avatar", "### Tipo de extensão\nMangá\n### Nome da extensão\nSushi Manga\n### Versão da extensão\n1.4.2\n### Parte afetada\nOutro\n### O que está acontecendo?\njava.io.IOException ao carregar avatar do perfil do usuário.\n", ["Problema na extensão", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            False, False,
+        ),
+        (
+            "v140_bug_neg_distinct_works_naruto_vs_onepiece", "bug",
+            _mk(7007, "[Problema na extensão]: Sushi Manga — Naruto", "### Tipo de extensão\nMangá\n### Nome da extensão\nSushi Manga\n### Versão da extensão\n1.4.2\n### Parte afetada\nLeitor / Imagens\n### O que está acontecendo?\nErro No pages found no capítulo 12 de Naruto.\n", ["Problema na extensão", "Mangá"]),
+            _mk(7008, "[Problema na extensão]: Sushi Manga — One Piece", "### Tipo de extensão\nMangá\n### Nome da extensão\nSushi Manga\n### Versão da extensão\n1.4.2\n### Parte afetada\nLeitor / Imagens\n### O que está acontecendo?\nErro No pages found no capítulo 12 de One Piece.\n", ["Problema na extensão", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            False, False,
+        ),
+        (
+            "v140_bug_neg_distinct_chapters_12_vs_18", "bug",
+            _mk(7009, "[Problema na extensão]: Sushi Manga — Naruto cap 12", "### Tipo de extensão\nMangá\n### Nome da extensão\nSushi Manga\n### Versão da extensão\n1.4.2\n### Parte afetada\nLeitor / Imagens\n### O que está acontecendo?\nErro No pages found no capítulo 12 de Naruto.\n", ["Problema na extensão", "Mangá"]),
+            _mk(7010, "[Problema na extensão]: Sushi Manga — Naruto cap 18", "### Tipo de extensão\nMangá\n### Nome da extensão\nSushi Manga\n### Versão da extensão\n1.4.2\n### Parte afetada\nLeitor / Imagens\n### O que está acontecendo?\nErro No pages found no capítulo 18 de Naruto.\n", ["Problema na extensão", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            False, False,
+        ),
+        (
+            "v140_bug_neg_distinct_episodes_5_vs_9", "bug",
+            _mk(7011, "[Problema na extensão]: Anime X — Ep 5", "### Tipo de extensão\nAnime\n### Nome da extensão\nAnime X\n### Versão da extensão\n1.0.0\n### Parte afetada\nVídeo / Player\n### O que está acontecendo?\nPlayer falha ao reproduzir o episódio 5.\n", ["Problema na extensão", "Anime"]),
+            _mk(7012, "[Problema na extensão]: Anime X — Ep 9", "### Tipo de extensão\nAnime\n### Nome da extensão\nAnime X\n### Versão da extensão\n1.0.0\n### Parte afetada\nVídeo / Player\n### O que está acontecendo?\nPlayer falha ao reproduzir o episódio 9.\n", ["Problema na extensão", "Anime"], created_at="2026-11-02T10:00:00Z"),
+            False, False,
+        ),
+        (
+            "v140_bug_neg_distinct_api_endpoints", "bug",
+            _mk(7013, "[Problema na extensão]: Sushi Manga — /api/search", "### Tipo de extensão\nMangá\n### Nome da extensão\nSushi Manga\n### Versão da extensão\n1.4.2\n### Parte afetada\nOutro\n### O que está acontecendo?\nEndpoint /api/search retorna HTTP 500.\n", ["Problema na extensão", "Mangá"]),
+            _mk(7014, "[Problema na extensão]: Sushi Manga — /api/chapters/12", "### Tipo de extensão\nMangá\n### Nome da extensão\nSushi Manga\n### Versão da extensão\n1.4.2\n### Parte afetada\nOutro\n### O que está acontecendo?\nEndpoint /api/chapters/12 retorna HTTP 500.\n", ["Problema na extensão", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            False, False,
+        ),
+        (
+            "v140_bug_pos_exact_work_chapter_sig", "bug",
+            _mk(7015, "[Problema na extensão]: Sushi Manga — Naruto cap 12", "### Tipo de extensão\nMangá\n### Nome da extensão\nSushi Manga\n### Versão da extensão\n1.4.2\n### Parte afetada\nLeitor / Imagens\n### O que está acontecendo?\nErro No pages found no capítulo 12 de Naruto ao abrir imagens.\n", ["Problema na extensão", "Mangá"]),
+            _mk(7016, "[Problema na extensão]: Sushi Manga — Cap 12 Naruto No pages found", "### Tipo de extensão\nMangá\n### Nome da extensão\nSushi Manga\n### Versão da extensão\n1.4.2\n### Parte afetada\nLeitor / Imagens\n### O que está acontecendo?\nAo carregar capítulo 12 de Naruto aparece No pages found.\n", ["Problema na extensão", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            True, True,
+        ),
+        (
+            "v140_dc_neg_same_old_and_new_url_not_transition", "domain_change",
+            _mk(7017, "[Mudança de domínio]: LoopExt", "### Tipo de extensão\nMangá\n### Nome da extensão\nLoopExt\n### URL antiga\nhttps://loopext.com\n### URL nova\nhttps://loopext.com\n", ["Mudança de domínio", "Mangá"]),
+            _mk(7018, "[Mudança de domínio]: LoopExt", "### Tipo de extensão\nMangá\n### Nome da extensão\nLoopExt\n### URL antiga\nhttps://loopext.com\n### URL nova\nhttps://loopext.com/\n", ["Mudança de domínio", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            False, True,
+        ),
+        (
+            "v140_enh_neg_generic_overlap_only", "enhancement",
+            _mk(7019, "[Sugestão]: Katsu — Melhorar busca", "### Título ou resumo\nMelhorar carregamento de busca\n### Descrição da melhoria\nAdicionar filtro de qualidade na Katsu.\n### Extensão relacionada (opcional)\nKatsu\n", ["Sugestão"]),
+            _mk(7020, "[Sugestão]: Katsu — Melhorar histórico", "### Título ou resumo\nMelhorar carregamento do leitor\n### Descrição da melhoria\nAdicionar download em lote com fila na Katsu.\n### Extensão relacionada (opcional)\nKatsu\n", ["Sugestão"], created_at="2026-11-02T10:00:00Z"),
+            False, False,
+        ),
     ]
     return cases
 
