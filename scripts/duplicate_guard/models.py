@@ -11,7 +11,7 @@ from typing import Literal
 
 Classification = Literal["no_match", "possible_duplicate", "confirmed_duplicate"]
 
-RULE_ENGINE_VERSION = "1.4.0"
+RULE_ENGINE_VERSION = "1.5.0"
 
 INTENT_CREATE_EXTENSION = "create_extension"
 INTENT_BUG_FIX = "bug_fix"
@@ -116,6 +116,10 @@ class NormalizedUrl:
     is_valid_domain: bool
     is_shared_host: bool
     raw_identifier: str
+    destination_key: str = ""
+    exact_host: str = ""
+    subdomain: str = ""
+    port: int | None = None
 
 
 @dataclass(frozen=True)
@@ -213,6 +217,7 @@ class ParsedIssue:
     mentioned_chapters: frozenset[str] = frozenset()
     mentioned_episodes: frozenset[str] = frozenset()
     api_endpoints: frozenset[str] = frozenset()
+    title_symptom: str = ""
 
 
 @dataclass(frozen=True)

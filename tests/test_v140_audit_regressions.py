@@ -945,7 +945,7 @@ def test_c11_cli_cache_invalidates_new_extension_when_catalog_digest_changes(tmp
 # ---------------------------------------------------------------------------
 
 def test_d01_rule_engine_version_1_4_0_invalidates_1_3_0_cache(tmp_path, capsys):
-    assert RULE_ENGINE_VERSION == "1.4.0"
+    assert RULE_ENGINE_VERSION >= "1.4.0"
     i1 = _bug(501, "No pages found", "Erro No pages found no capítulo 1 de Naruto.")
     cache_file = tmp_path / "cache_130.json"
     cache_file.write_text(
@@ -974,7 +974,7 @@ def test_d01_rule_engine_version_1_4_0_invalidates_1_3_0_cache(tmp_path, capsys)
     rc = run_cli(["--mode", "reconcile", "--cache-file", str(cache_file)], client_override=api)
     assert rc == 0
     out = json.loads(capsys.readouterr().out)
-    assert out["rule_version"] == "1.4.0"
+    assert out["rule_version"] == RULE_ENGINE_VERSION
     assert out["effective_mode"] == "backfill"
     assert out["skipped_cached_count"] == 0
 

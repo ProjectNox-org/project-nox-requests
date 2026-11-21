@@ -373,6 +373,78 @@ def build_labeled_cases():
             _mk(7020, "[Sugestão]: Katsu — Melhorar histórico", "### Título ou resumo\nMelhorar carregamento do leitor\n### Descrição da melhoria\nAdicionar download em lote com fila na Katsu.\n### Extensão relacionada (opcional)\nKatsu\n", ["Sugestão"], created_at="2026-11-02T10:00:00Z"),
             False, False,
         ),
+        (
+            "v150_bug_neg_double_count_bare_no_pages", "bug",
+            _mk(8001, "[Problema na extensão]: Sushi Manga", "### Tipo de extensão\nMangá\n### Nome da extensão\nSushi Manga\n### Versão da extensão\n1.4.2\n### Parte afetada\nLeitor / Imagens\n### O que está acontecendo?\nNo pages found.\n", ["Problema na extensão", "Mangá"]),
+            _mk(8002, "[Problema na extensão]: Sushi Manga", "### Tipo de extensão\nMangá\n### Nome da extensão\nSushi Manga\n### Versão da extensão\n1.4.2\n### Parte afetada\nLeitor / Imagens\n### O que está acontecendo?\nAo abrir o leitor aparece No pages found.\n", ["Problema na extensão", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            False, True,
+        ),
+        (
+            "v150_bug_neg_title_work_naruto_vs_one_piece", "bug",
+            _mk(8003, "[Problema na extensão]: Sushi Manga — Naruto não carrega", "### Tipo de extensão\nMangá\n### Nome da extensão\nSushi Manga\n### Versão da extensão\n1.4.2\n### Parte afetada\nLeitor / Imagens\n### O que está acontecendo?\nAo abrir o leitor aparece No pages found.\n", ["Problema na extensão", "Mangá"]),
+            _mk(8004, "[Problema na extensão]: Sushi Manga — One Piece não carrega", "### Tipo de extensão\nMangá\n### Nome da extensão\nSushi Manga\n### Versão da extensão\n1.4.2\n### Parte afetada\nLeitor / Imagens\n### O que está acontecendo?\nAo abrir o leitor aparece No pages found.\n", ["Problema na extensão", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            False, False,
+        ),
+        (
+            "v150_bug_neg_sec61_case_c_title_only_works", "bug",
+            _mk(8005, "[Problema na extensão]: Sushi Manga — Naruto — No pages found", "### Tipo de extensão\nMangá\n### Nome da extensão\nSushi Manga\n### Versão da extensão\n1.4.2\n### Parte afetada\nLeitor / Imagens\n### O que está acontecendo?\nNo pages found.\n", ["Problema na extensão", "Mangá"]),
+            _mk(8006, "[Problema na extensão]: Sushi Manga — One Piece — No pages found", "### Tipo de extensão\nMangá\n### Nome da extensão\nSushi Manga\n### Versão da extensão\n1.4.2\n### Parte afetada\nLeitor / Imagens\n### O que está acontecendo?\nNo pages found.\n", ["Problema na extensão", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            False, False,
+        ),
+        (
+            "v150_bug_neg_full_url_endpoints_search_vs_details", "bug",
+            _mk(8007, "[Problema na extensão]: Sushi Manga — Erro API", "### Tipo de extensão\nMangá\n### Nome da extensão\nSushi Manga\n### Versão da extensão\n1.4.2\n### Parte afetada\nBusca / Filtros\n### O que está acontecendo?\nJsonDecodingException ao consultar https://api.sushimanga.com.br/api/search.\n", ["Problema na extensão", "Mangá"]),
+            _mk(8008, "[Problema na extensão]: Sushi Manga — Erro API", "### Tipo de extensão\nMangá\n### Nome da extensão\nSushi Manga\n### Versão da extensão\n1.4.2\n### Parte afetada\nBusca / Filtros\n### O que está acontecendo?\nJsonDecodingException ao consultar https://api.sushimanga.com.br/api/details.\n", ["Problema na extensão", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            False, False,
+        ),
+        (
+            "v150_bug_neg_same_endpoint_diff_http_method", "bug",
+            _mk(8009, "[Problema na extensão]: Sushi Manga — POST chapters", "### Tipo de extensão\nMangá\n### Nome da extensão\nSushi Manga\n### Versão da extensão\n1.4.2\n### Parte afetada\nCapítulos\n### O que está acontecendo?\nJsonDecodingException ao enviar POST /api/chapters.\n", ["Problema na extensão", "Mangá"]),
+            _mk(8010, "[Problema na extensão]: Sushi Manga — GET chapters", "### Tipo de extensão\nMangá\n### Nome da extensão\nSushi Manga\n### Versão da extensão\n1.4.2\n### Parte afetada\nCapítulos\n### O que está acontecendo?\nJsonDecodingException ao enviar GET /api/chapters.\n", ["Problema na extensão", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            False, False,
+        ),
+        (
+            "v150_bug_neg_same_endpoint_diff_subdomains", "bug",
+            _mk(8011, "[Problema na extensão]: Sushi Manga — API", "### Tipo de extensão\nMangá\n### Nome da extensão\nSushi Manga\n### Versão da extensão\n1.4.2\n### Parte afetada\nCapítulos\n### O que está acontecendo?\nJsonDecodingException em https://api.sushimanga.com.br/api/chapters.\n", ["Problema na extensão", "Mangá"]),
+            _mk(8012, "[Problema na extensão]: Sushi Manga — CDN", "### Tipo de extensão\nMangá\n### Nome da extensão\nSushi Manga\n### Versão da extensão\n1.4.2\n### Parte afetada\nCapítulos\n### O que está acontecendo?\nJsonDecodingException em https://cdn.sushimanga.com.br/api/chapters.\n", ["Problema na extensão", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            False, False,
+        ),
+        (
+            "v150_bug_pos_full_url_endpoint_matching_params", "bug",
+            _mk(8013, "[Problema na extensão]: Sushi Manga — Naruto capítulos", "### Tipo de extensão\nMangá\n### Nome da extensão\nSushi Manga\n### Versão da extensão\n1.4.2\n### Parte afetada\nCapítulos\n### O que está acontecendo?\nJsonDecodingException ao chamar GET https://api.sushimanga.com.br/api/chapters/12?lang=pt em Naruto.\n", ["Problema na extensão", "Mangá"]),
+            _mk(8014, "[Problema na extensão]: Sushi Manga — Naruto cap 12", "### Tipo de extensão\nMangá\n### Nome da extensão\nSushi Manga\n### Versão da extensão\n1.4.2\n### Parte afetada\nCapítulos\n### O que está acontecendo?\nErro JsonDecodingException em GET /api/chapters/12?lang=pt&ts=999123 no capítulo 12 de Naruto.\n", ["Problema na extensão", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            True, True,
+        ),
+        (
+            "v150_dc_neg_subdomains_pt_vs_en", "domain_change",
+            _mk(8015, "[Mudança de domínio]: Anime Sushi", "### Tipo de extensão\nAnime\n### Nome da extensão\nAnime Sushi\n### URL antiga\nhttps://animesushi.old\n### URL nova\nhttps://pt.animesushi.com\n", ["Mudança de domínio", "Anime"]),
+            _mk(8016, "[Mudança de domínio]: Anime Sushi", "### Tipo de extensão\nAnime\n### Nome da extensão\nAnime Sushi\n### URL antiga\nhttps://animesushi.old\n### URL nova\nhttps://en.animesushi.com\n", ["Mudança de domínio", "Anime"], created_at="2026-11-02T10:00:00Z"),
+            False, True,
+        ),
+        (
+            "v150_dc_neg_subdomains_api_vs_www", "domain_change",
+            _mk(8017, "[Mudança de domínio]: API Sushi", "### Tipo de extensão\nMangá\n### Nome da extensão\nAPI Sushi\n### URL antiga\nhttps://apisushi.old\n### URL nova\nhttps://api.apisushi.com\n", ["Mudança de domínio", "Mangá"]),
+            _mk(8018, "[Mudança de domínio]: API Sushi", "### Tipo de extensão\nMangá\n### Nome da extensão\nAPI Sushi\n### URL antiga\nhttps://apisushi.old\n### URL nova\nhttps://www.apisushi.com\n", ["Mudança de domínio", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            False, True,
+        ),
+        (
+            "v150_dc_neg_path_br_vs_en", "domain_change",
+            _mk(8019, "[Mudança de domínio]: LocalePath", "### Tipo de extensão\nMangá\n### Nome da extensão\nLocalePath\n### URL antiga\nhttps://localepath.old\n### URL nova\nhttps://localepath.com/br\n", ["Mudança de domínio", "Mangá"]),
+            _mk(8020, "[Mudança de domínio]: LocalePath", "### Tipo de extensão\nMangá\n### Nome da extensão\nLocalePath\n### URL antiga\nhttps://localepath.old\n### URL nova\nhttps://localepath.com/en\n", ["Mudança de domínio", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            False, True,
+        ),
+        (
+            "v150_dc_neg_different_tlds_com_vs_net", "domain_change",
+            _mk(8021, "[Mudança de domínio]: DomainTld", "### Tipo de extensão\nMangá\n### Nome da extensão\nDomainTld\n### URL antiga\nhttps://domaintld.old\n### URL nova\nhttps://domaintld.com\n", ["Mudança de domínio", "Mangá"]),
+            _mk(8022, "[Mudança de domínio]: DomainTld", "### Tipo de extensão\nMangá\n### Nome da extensão\nDomainTld\n### URL antiga\nhttps://domaintld.old\n### URL nova\nhttps://domaintld.net\n", ["Mudança de domínio", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            False, False,
+        ),
+        (
+            "v150_dc_pos_www_stripped_same_subdomain_destination", "domain_change",
+            _mk(8023, "[Mudança de domínio]: SubSame", "### Tipo de extensão\nMangá\n### Nome da extensão\nSubSame\n### URL antiga\nhttp://www.subsame.old/\n### URL nova\nhttps://v2.subsame.com/\n", ["Mudança de domínio", "Mangá"]),
+            _mk(8024, "[Mudança de domínio]: SubSame", "### Tipo de extensão\nMangá\n### Nome da extensão\nSubSame\n### URL antiga\nhttps://subsame.old\n### URL nova\nhttps://www.v2.subsame.com\n", ["Mudança de domínio", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            True, True,
+        ),
     ]
     return cases
 
@@ -383,6 +455,7 @@ def compute_metrics():
 
     tp_close = fp_close = fn_close = tn_close = 0
     tp_alert = fp_alert = fn_alert = tn_alert = 0
+    kept_open_uncertainty = 0
     per_cat = defaultdict(lambda: {"total": 0, "close_tp": 0, "close_fp": 0, "close_fn": 0, "alert_tp": 0, "alert_fp": 0, "alert_fn": 0})
     failures: list[str] = []
 
@@ -393,6 +466,8 @@ def compute_metrics():
 
         pred_close = dec.classification == "confirmed_duplicate" and dec.should_auto_close
         pred_alert = dec.classification in ("confirmed_duplicate", "possible_duplicate")
+        if dec.classification == "possible_duplicate":
+            kept_open_uncertainty += 1
 
         per_cat[cat]["total"] += 1
         if pred_close and exp_close:
@@ -430,6 +505,7 @@ def compute_metrics():
 
     return {
         "total_cases": len(cases),
+        "kept_open_uncertainty": kept_open_uncertainty,
         "auto_close": {"tp": tp_close, "fp": fp_close, "fn": fn_close, "tn": tn_close, "precision": close_prec, "recall": close_rec},
         "alert_or_close": {"tp": tp_alert, "fp": fp_alert, "fn": fn_alert, "tn": tn_alert, "precision": alert_prec, "recall": alert_rec},
         "per_category": dict(per_cat),

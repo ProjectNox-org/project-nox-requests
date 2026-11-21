@@ -236,6 +236,35 @@ _STRONG_SPECIFIC_BUG_SIGNATURES = frozenset({
     "null_pointer",
 })
 
+_SIGNATURE_CONSTITUENT_TOKENS: dict[str, frozenset[str]] = {
+    "no_pages_found": frozenset({"no", "page", "pages", "found", "nenhuma", "pagina", "paginas", "encontrada", "encontradas", "sem"}),
+    "no_results_found": frozenset({"no", "result", "results", "found", "nenhum", "resultado", "resultados", "encontrado", "encontrados"}),
+    "json_decode": frozenset({"jsondecodingexception", "serializationexception", "json", "invalido", "invalid", "syntaxerror", "erro", "ler", "falha"}),
+    "null_pointer": frozenset({"nullpointerexception", "null", "object", "reference", "attempt", "invoke", "virtual", "method", "npe", "java", "lang"}),
+    "nxdomain_dns": frozenset({"nxdomain", "unknownhostexception", "resolve", "resolver", "host", "hostname", "conhecido", "endereco"}),
+    "ssl_tls": frozenset({"sslhandshakeexception", "certpathvalidatorexception", "ssl", "certificado"}),
+    "timeout": frozenset({"sockettimeoutexception", "timeout", "timed", "out", "tempo", "esgotado"}),
+    "cloudflare": frozenset({"cloudflare", "turnstile", "challenge", "contornar"}),
+    "login_auth": frozenset({"login", "autenticacao", "autenticar", "cadastro", "sessao", "conta", "entrar"}),
+    "slow_download": frozenset({"lentidao", "demorando", "demora", "baixar", "download", "lento"}),
+    "video_playback": frozenset({"reproduz", "reproduziu", "reproduzir", "video", "carrega", "player"}),
+    "site_blocked": frozenset({"site", "bloqueou", "acesso", "bloqueio"}),
+}
+
+_ALL_SIG_CONSTITUENT_TOKENS: frozenset[str] = frozenset().union(*_SIGNATURE_CONSTITUENT_TOKENS.values())
+
+_DECLARED_PART_TOKENS: dict[str, frozenset[str]] = {
+    "reader": frozenset({"leitor", "imagem", "imagens"}),
+    "chapters": frozenset({"capitulo", "capitulos"}),
+    "video": frozenset({"video", "videos", "player", "episodio", "episodios"}),
+    "search": frozenset({"busca", "pesquisa", "filtro", "filtros"}),
+    "catalog": frozenset({"catalogo", "popular", "populares", "recentes"}),
+    "login": frozenset({"login", "conta", "autenticacao"}),
+    "install": frozenset({"instalacao", "atualizacao"}),
+    "details": frozenset({"detalhes", "metadados", "sinopse"}),
+    "metadata": frozenset({"detalhes", "metadados", "sinopse"}),
+}
+
 _GENERIC_BUG_STOPWORDS = frozenset({
     "extensao", "extensoes", "extension", "fonte", "fontes", "source",
     "manga", "mangas", "anime", "animes", "site", "sites", "app", "aplicativo",
@@ -275,9 +304,15 @@ _SIMPLE_PLURAL_FOLD = {
 }
 
 
-def _specific_bug_evidence_tokens(issue: ParsedIssue, *, include_part_words: bool = True) -> frozenset[str]:
-    """Return informative non-generic tokens excluding extension name, domain, and generic bug boilerplate."""
-    text = f"{issue.title_symptom if hasattr(issue, 'title_symptom') else issue.clean_title} {issue.description} {issue.reproduction} {issue.additional_info}"
+def _specific_bug_evidence_tokens(
+    issue: ParsedIssue,
+    *,
+    include_part_words: bool = True,
+    exclude_signature_tokens: bool = False,
+    exclude_declared_part_tokens: bool = False,
+) -> frozenset[str]:
+    """Return informative non-generic tokens excluding extension name, domain, and optionally signature/part overlap."""
+    text = f"{issue.title_symptom or issue.clean_title} {issue.description} {issue.reproduction} {issue.additional_info}"
     raw_tokens = tokenize(text)
     exclude = set(_GENERIC_BUG_STOPWORDS)
     exclude.update(tokenize(issue.name))
@@ -285,12 +320,93 @@ def _specific_bug_evidence_tokens(issue: ParsedIssue, *, include_part_words: boo
         exclude.update(re.findall(r"[a-z0-9]+", issue.url.host.lower()))
     if not include_part_words:
         exclude.update(_PART_LABEL_WORDS)
+    if exclude_signature_tokens:
+        for sig in issue.error_signatures:
+            exclude.update(_SIGNATURE_CONSTITUENT_TOKENS.get(sig, ()))
+    if exclude_declared_part_tokens:
+        for part in issue.affected_parts:
+            exclude.update(_DECLARED_PART_TOKENS.get(part, ()))
     cleaned: set[str] = set()
     for tok in raw_tokens:
         folded = _SIMPLE_PLURAL_FOLD.get(tok, tok)
         if folded not in exclude and tok not in exclude:
             cleaned.add(folded)
     return frozenset(cleaned)
+
+
+def _split_endpoint_tokens(endpoints: frozenset[str]) -> tuple[frozenset[str], frozenset[str], frozenset[str]]:
+    """Split extracted endpoint identifiers into (paths, method_bindings, endpoint_hosts)."""
+    paths: set[str] = set()
+    methods: set[str] = set()
+    hosts: set[str] = set()
+    for ep in endpoints:
+        if ep.startswith("method:"):
+            methods.add(ep)
+        elif ep.startswith("ephost:"):
+            hosts.add(ep)
+        else:
+            paths.add(ep)
+    return frozenset(paths), frozenset(methods), frozenset(hosts)
+
+
+_TITLE_SUBJECT_GENERIC_NOUNS = frozenset({
+    "possivel", "impossivel", "lista", "listagem", "menu", "tela", "aba", "secao",
+    "interface", "layout", "modo", "item", "itens", "dados", "carregamento",
+    "reproducao", "conexao", "servidor", "resposta", "requisicao", "request",
+    "parte", "area", "campo", "conteudo", "conteudos", "info", "informacao",
+    "informacoes", "detalhe", "endpoint", "rota", "capitulo", "episodio",
+})
+
+
+def _distinctive_title_subject_tokens(issue: ParsedIssue) -> frozenset[str]:
+    ts = (issue.title_symptom or "").strip()
+    if not ts:
+        return frozenset()
+    ext_toks = tokenize(issue.name)
+    tech_parts: set[str] = set()
+    for t in issue.technical_tokens:
+        val = t.split(":", 1)[1] if ":" in t else t
+        tech_parts.update(re.findall(r"[a-z0-9]+", val.lower()))
+    if issue.url and issue.url.host:
+        tech_parts.update(re.findall(r"[a-z0-9]+", issue.url.host.lower()))
+    exclude = (
+        set(_GENERIC_BUG_STOPWORDS)
+        | set(_PART_LABEL_WORDS)
+        | set(_ALL_SIG_CONSTITUENT_TOKENS)
+        | _TITLE_SUBJECT_GENERIC_NOUNS
+        | ext_toks
+        | tech_parts
+        | {"cap", "ep"}
+    )
+    out: set[str] = set()
+    for tok in tokenize(ts):
+        folded = _SIMPLE_PLURAL_FOLD.get(tok, tok)
+        if tok.isdigit() or len(folded) < 3:
+            continue
+        if tok in exclude or folded in exclude:
+            continue
+        if issue.compact_name and len(folded) >= 4 and (folded in issue.compact_name):
+            continue
+        if folded.endswith(("exception", "error")):
+            continue
+        out.add(folded)
+    return frozenset(out)
+
+
+def _title_subjects_diverge(target: ParsedIssue, cand: ParsedIssue) -> tuple[bool, str | None, bool]:
+    subj_t = _distinctive_title_subject_tokens(target)
+    subj_c = _distinctive_title_subject_tokens(cand)
+    if not subj_t and not subj_c:
+        return False, None, False
+    text_t = {_SIMPLE_PLURAL_FOLD.get(tok, tok) for tok in target.all_text_tokens} | target.all_text_tokens
+    text_c = {_SIMPLE_PLURAL_FOLD.get(tok, tok) for tok in cand.all_text_tokens} | cand.all_text_tokens
+    missing_in_c = subj_t - text_c
+    missing_in_t = subj_c - text_t
+    if missing_in_c and missing_in_t:
+        return True, "different_title_subjects", True
+    if missing_in_c or missing_in_t:
+        return True, "unilateral_title_subject", False
+    return False, None, False
 
 
 _COMMENT_DENIAL_RE = re.compile(
@@ -415,10 +531,17 @@ def evaluate_comment_clarifications(
             return True, "chapter_divergence_in_comment"
         if extra_episodes and extra_episodes != canonical.mentioned_episodes:
             return True, "episode_divergence_in_comment"
-        if extra_endpoints and canonical.api_endpoints and not (extra_endpoints & canonical.api_endpoints):
-            return True, "endpoint_divergence_in_comment"
-        if extra_endpoints and not canonical.api_endpoints:
-            return True, "endpoint_clarification_in_comment"
+        if extra_endpoints:
+            e_paths, e_methods, e_hosts = _split_endpoint_tokens(extra_endpoints)
+            c_paths, c_methods, c_hosts = _split_endpoint_tokens(canonical.api_endpoints)
+            if e_paths and c_paths and not (e_paths & c_paths):
+                return True, "endpoint_divergence_in_comment"
+            if e_paths and not c_paths:
+                return True, "endpoint_clarification_in_comment"
+            if e_methods and c_methods and not (e_methods & c_methods):
+                return True, "http_method_divergence_in_comment"
+            if e_hosts and c_hosts and not (e_hosts & c_hosts):
+                return True, "endpoint_subdomain_divergence_in_comment"
         if extra_langs and target.category in (CATEGORY_NEW_EXTENSION, CATEGORY_ENHANCEMENT):
             c_langs = canonical.target_languages - {"all"}
             e_langs = extra_langs - {"all"}
@@ -450,45 +573,69 @@ def evaluate_comment_clarifications(
 
 
 def _bug_scopes_diverge(target: ParsedIssue, cand: ParsedIssue) -> tuple[bool, str | None, bool]:
-    """Compare work, chapter, episode, endpoint, and DNS-host scopes between two bugs.
+    """Compare work, title subject, chapter, episode, endpoint, method, and DNS-host scopes between two bugs.
 
     Returns (diverges, reason_code, hard_disjoint) where hard_disjoint=True warrants no_match.
+    Always evaluate hard-disjoint contradictions before soft unilateral ambiguities.
     """
     wt = target.specific_work_hint.replace(" ", "")
     wc = cand.specific_work_hint.replace(" ", "")
     if wt and wc and levenshtein_ratio(wt, wc) < 0.80:
         return True, "different_works", True
-    if bool(wt) != bool(wc):
-        return True, "local_vs_global_work", False
 
-    shared_endpoints = target.api_endpoints & cand.api_endpoints
-    if target.api_endpoints and cand.api_endpoints and not shared_endpoints:
+    paths_t, methods_t, ephosts_t = _split_endpoint_tokens(target.api_endpoints)
+    paths_c, methods_c, ephosts_c = _split_endpoint_tokens(cand.api_endpoints)
+    shared_endpoints = paths_t & paths_c
+    if paths_t and paths_c and not shared_endpoints:
         return True, "different_endpoints", True
-    if bool(target.api_endpoints) != bool(cand.api_endpoints):
-        return True, "endpoint_scope_mismatch", False
+    if methods_t and methods_c and not (methods_t & methods_c):
+        return True, "different_http_methods", True
+    if ephosts_t and ephosts_c and not (ephosts_t & ephosts_c):
+        return True, "different_endpoint_subdomains", True
 
-    if target.mentioned_chapters and cand.mentioned_chapters:
-        if target.mentioned_chapters != cand.mentioned_chapters:
-            return True, "different_chapters", True
-        # Matching chapter number without shared work or shared endpoint is ambiguous
-        if not (wt and wc) and not shared_endpoints:
-            return True, "chapter_without_work_or_endpoint", False
-    elif bool(target.mentioned_chapters) != bool(cand.mentioned_chapters):
-        return True, "local_vs_global_chapter", False
-
-    if target.mentioned_episodes and cand.mentioned_episodes:
-        if target.mentioned_episodes != cand.mentioned_episodes:
-            return True, "different_episodes", True
-        if not (wt and wc) and not shared_endpoints:
-            return True, "episode_without_work_or_endpoint", False
-    elif bool(target.mentioned_episodes) != bool(cand.mentioned_episodes):
-        return True, "local_vs_global_episode", False
+    if target.mentioned_chapters and cand.mentioned_chapters and target.mentioned_chapters != cand.mentioned_chapters:
+        return True, "different_chapters", True
+    if target.mentioned_episodes and cand.mentioned_episodes and target.mentioned_episodes != cand.mentioned_episodes:
+        return True, "different_episodes", True
 
     if "nxdomain_dns" in (target.error_signatures & cand.error_signatures):
         hosts_t = {t for t in target.technical_tokens if t.startswith("host:")}
         hosts_c = {t for t in cand.technical_tokens if t.startswith("host:")}
         if hosts_t and hosts_c and not (hosts_t & hosts_c):
             return True, "different_dns_hosts", True
+
+    title_div, title_reason, title_hard = _title_subjects_diverge(target, cand)
+    if title_div and title_hard and not (wt and wc) and not shared_endpoints:
+        return True, title_reason, True
+
+    # Soft / unilateral scope ambiguities (keep open as possible_duplicate, never auto-close)
+    if bool(wt) != bool(wc):
+        return True, "local_vs_global_work", False
+
+    has_shared_nx_host = (
+        "nxdomain_dns" in (target.error_signatures & cand.error_signatures)
+        and bool(
+            {t for t in target.technical_tokens if t.startswith("host:")}
+            & {t for t in cand.technical_tokens if t.startswith("host:")}
+        )
+    )
+    if bool(paths_t) != bool(paths_c) and not has_shared_nx_host:
+        return True, "endpoint_scope_mismatch", False
+
+    if title_div and not (wt and wc) and not shared_endpoints:
+        return True, title_reason, False
+
+    if target.mentioned_chapters and cand.mentioned_chapters:
+        if not (wt and wc) and not shared_endpoints:
+            return True, "chapter_without_work_or_endpoint", False
+    elif bool(target.mentioned_chapters) != bool(cand.mentioned_chapters):
+        return True, "local_vs_global_chapter", False
+
+    if target.mentioned_episodes and cand.mentioned_episodes:
+        if not (wt and wc) and not shared_endpoints:
+            return True, "episode_without_work_or_endpoint", False
+    elif bool(target.mentioned_episodes) != bool(cand.mentioned_episodes):
+        return True, "local_vs_global_episode", False
 
     return False, None, False
 
@@ -1095,6 +1242,16 @@ class DuplicateMatcher:
                 or name_ratio >= th.new_extension_confirmed_name_edit_ratio
                 or stem_compat
             )
+            if t_url.host and c_url.host and (t_url.host != c_url.host or t_url.port != c_url.port):
+                return (
+                    "possible_duplicate",
+                    0.68,
+                    (
+                        f"Mesmo domínio registrável ({t_url.registrable_domain}), porém subdomínio ou porta distinta ({t_url.exact_host or t_url.host} vs {c_url.exact_host or c_url.host}); requer revisão humana.",
+                    ),
+                    ("subdomain_or_port_divergence",),
+                    "ambiguous_same_source",
+                )
             # Divergent substantive observations or language superset on creation tickets block automatic closure
             if language_scope_incompatible:
                 return (
@@ -1187,7 +1344,9 @@ class DuplicateMatcher:
         shared_tech = target.technical_tokens & cand.technical_tokens
         shared_specific_exc = frozenset(t for t in shared_tech if t.startswith("exc:"))
         shared_hosts = frozenset(t for t in shared_tech if t.startswith("host:"))
-        shared_endpoints = target.api_endpoints & cand.api_endpoints
+        paths_t, _, _ = _split_endpoint_tokens(target.api_endpoints)
+        paths_c, _, _ = _split_endpoint_tokens(cand.api_endpoints)
+        shared_endpoints = paths_t & paths_c
         symptoms_conflict = _symptoms_contradict(target, cand)
         scope_diverges, scope_reason, scope_hard_disjoint = _bug_scopes_diverge(target, cand)
 
@@ -1329,34 +1488,75 @@ class DuplicateMatcher:
                 )
             return None
 
-        # Positive specific equivalence requirements for confirmed_duplicate in bugs (Sec 3, 4 & 5):
+        # Positive specific equivalence requirements for confirmed_duplicate in bugs (v1.5.0 independent evidence):
+        # Signature words (e.g. 'pages', 'found' from 'No pages found') and declared part names ('leitor')
+        # MUST NOT be double-counted as independent context tokens.
         # Shared hostnames (host:*) and generic exceptions (gexc:*) NEVER authorize auto-close alone.
-        # Only shared_hosts tied to nxdomain_dns (DNS host unreachable) provide technical corroboration.
-        shared_specific_loose = _specific_bug_evidence_tokens(target, include_part_words=True) & _specific_bug_evidence_tokens(cand, include_part_words=True)
-        shared_specific_strict = _specific_bug_evidence_tokens(target, include_part_words=False) & _specific_bug_evidence_tokens(cand, include_part_words=False)
+        shared_indep = (
+            _specific_bug_evidence_tokens(
+                target,
+                include_part_words=True,
+                exclude_signature_tokens=True,
+                exclude_declared_part_tokens=True,
+            )
+            & _specific_bug_evidence_tokens(
+                cand,
+                include_part_words=True,
+                exclude_signature_tokens=True,
+                exclude_declared_part_tokens=True,
+            )
+        )
+        shared_specific_strict = (
+            _specific_bug_evidence_tokens(
+                target,
+                include_part_words=False,
+                exclude_signature_tokens=True,
+                exclude_declared_part_tokens=True,
+            )
+            & _specific_bug_evidence_tokens(
+                cand,
+                include_part_words=False,
+                exclude_signature_tokens=True,
+                exclude_declared_part_tokens=True,
+            )
+        )
         strong_specific_sigs = shared_sigs & _STRONG_SPECIFIC_BUG_SIGNATURES
         has_nxdomain_host = bool("nxdomain_dns" in strong_specific_sigs and shared_hosts)
         # Non-exception shared tokens count so shared JsonDecodingException alone cannot skip context verification
         exc_tok_names = {t.split(":", 1)[1] for t in shared_specific_exc}
-        non_exc_specific_loose = shared_specific_loose - exc_tok_names
+        non_exc_indep = shared_indep - exc_tok_names
         has_specific_tech_evidence = bool(strong_specific_sigs or shared_specific_exc)
+
+        has_shared_scope = bool(
+            (target.specific_work_hint and cand.specific_work_hint and not _bug_scopes_diverge(target, cand)[0])
+            or (target.mentioned_chapters and target.mentioned_chapters == cand.mentioned_chapters)
+            or (target.mentioned_episodes and target.mentioned_episodes == cand.mentioned_episodes)
+        )
+        same_version = bool(target.version_tuple and cand.version_tuple and target.version_tuple == cand.version_tuple)
 
         desc_len_t = len(normalize_text(f"{target.clean_title} {target.description}", preserve_urls=False))
         desc_len_c = len(normalize_text(f"{cand.clean_title} {cand.description}", preserve_urls=False))
 
-        # Tier 1: Strong specific technical signature or specific discriminative exception + compatible part + rich shared context
+        # Tier 1: Strong specific technical signature or discriminative exception + compatible part + independent context
         if has_specific_tech_evidence and (parts_rel in ("same", "adjacent") or has_nxdomain_host):
             context_ok = (
                 bool(shared_endpoints)
                 or has_nxdomain_host
+                or has_shared_scope
                 or (
-                    len(shared_specific_loose) >= 2
-                    and (not shared_specific_exc or len(non_exc_specific_loose) >= 2)
+                    len(shared_indep) >= 2
+                    and (not shared_specific_exc or len(non_exc_indep) >= 2)
                     and (
                         text_sim >= th.bug_confirmed_structured_text_similarity
                         or "no_pages_found" in strong_specific_sigs
                         or "nxdomain_dns" in strong_specific_sigs
                     )
+                )
+                or (
+                    "no_pages_found" in strong_specific_sigs
+                    and len(shared_indep) >= 1
+                    and parts_rel == "same"
+                    and same_version
                 )
             )
             if context_ok:
@@ -1368,7 +1568,7 @@ class DuplicateMatcher:
                     "confirmed_duplicate",
                     round(min(0.98, max(0.88, text_sim + 0.35)), 3),
                     (
-                        f"Mesma extensão ({target.name}), parte afetada e escopo compatíveis, e evidência técnica específica equivalente no mesmo incidente ({sigs_str}).",
+                        f"Mesma extensão ({target.name}), parte afetada e escopo compatíveis, e evidências independentes equivalentes no mesmo incidente ({sigs_str}).",
                     ),
                     (),
                     "duplicate",
@@ -1451,6 +1651,18 @@ class DuplicateMatcher:
         if t_new.is_valid_domain and c_new.is_valid_domain:
             if t_new.identity_key != c_new.identity_key:
                 return None
+            t_new_dest = t_new.destination_key or t_new.identity_key
+            c_new_dest = c_new.destination_key or c_new.identity_key
+            if t_new_dest != c_new_dest:
+                return (
+                    "possible_duplicate",
+                    0.66,
+                    (
+                        f"Mesmo domínio registrável na URL nova ({t_new.registrable_domain}), porém subdomínio, porta ou caminho de destino divergem ({t_new.exact_host}{t_new.normalized_path if t_new.normalized_path != '/' else ''} vs {c_new.exact_host}{c_new.normalized_path if c_new.normalized_path != '/' else ''}); requer revisão humana.",
+                    ),
+                    ("destination_subdomain_or_path_mismatch",),
+                    "ambiguous_same_source",
+                )
             same_new = True
         else:
             same_new = t_new.identity_key == c_new.identity_key
@@ -1458,15 +1670,11 @@ class DuplicateMatcher:
         if not same_new:
             return None
 
-        # Both target and candidate share the SAME destination domain
-        same_old_valid = bool(
-            t_old and c_old and t_old.is_valid_domain and c_old.is_valid_domain
-            and t_old.identity_key == c_old.identity_key
-        )
-        old_contradicts = bool(
-            t_old and c_old and t_old.is_valid_domain and c_old.is_valid_domain
-            and t_old.identity_key != c_old.identity_key
-        )
+        # Both target and candidate share the EXACT same destination
+        t_old_dest = (t_old.destination_key or t_old.identity_key) if (t_old and t_old.is_valid_domain) else ""
+        c_old_dest = (c_old.destination_key or c_old.identity_key) if (c_old and c_old.is_valid_domain) else ""
+        same_old_valid = bool(t_old_dest and c_old_dest and t_old_dest == c_old_dest)
+        old_contradicts = bool(t_old_dest and c_old_dest and t_old_dest != c_old_dest)
         if old_contradicts:
             return (
                 "possible_duplicate",
@@ -1478,7 +1686,8 @@ class DuplicateMatcher:
 
         # Degenerate domain change (old == new) cannot justify automatic closure
         if same_old_valid and t_new.is_valid_domain:
-            if t_old.identity_key == t_new.identity_key:  # type: ignore[union-attr]
+            t_new_dest = t_new.destination_key or t_new.identity_key
+            if t_old_dest == t_new_dest:
                 return (
                     "possible_duplicate",
                     0.65,
@@ -1486,12 +1695,14 @@ class DuplicateMatcher:
                     ("identical_old_and_new_url",),
                     "ambiguous_same_source",
                 )
+            old_label = t_old.exact_host or t_old.host  # type: ignore[union-attr]
+            new_label = t_new.exact_host or t_new.host
             if cand.is_open:
                 return (
                     "confirmed_duplicate",
                     0.99,
                     (
-                        f"Mesma extensão ({target.name}), mesma URL antiga ({t_old.host}) e mesma URL nova ({t_new.host}).",
+                        f"Mesma extensão ({target.name}), mesma URL antiga ({old_label}) e mesma URL nova ({new_label}).",
                     ),
                     (),
                     "duplicate",
@@ -1499,7 +1710,7 @@ class DuplicateMatcher:
             return (
                 "possible_duplicate",
                 0.80,
-                (f"Transição idêntica ({t_old.host} → {t_new.host}) já registrada em ticket encerrado.",),
+                (f"Transição idêntica ({old_label} → {new_label}) já registrada em ticket encerrado.",),
                 ("candidate_closed",),
                 "historical_related",
             )
@@ -1524,9 +1735,12 @@ class DuplicateMatcher:
         # Compare domains if both explicitly provide URLs
         t_url = target.url or (target.extra_urls[0] if target.extra_urls else None)
         c_url = cand.url or (cand.extra_urls[0] if cand.extra_urls else None)
+        diff_dest_same_reg = False
         if t_url and c_url and t_url.is_valid_domain and c_url.is_valid_domain:
             if t_url.identity_key != c_url.identity_key:
                 return None
+            if (t_url.destination_key or t_url.identity_key) != (c_url.destination_key or c_url.identity_key):
+                diff_dest_same_reg = True
 
         ev_t = classify_dead_source_evidence(f"{target.description} {target.additional_info}")
         ev_c = classify_dead_source_evidence(f"{cand.description} {cand.additional_info}")
@@ -1549,7 +1763,7 @@ class DuplicateMatcher:
                 )
             return None
 
-        if cand.is_open and ev_t == "permanent" and ev_c == "permanent" and (
+        if not diff_dest_same_reg and cand.is_open and ev_t == "permanent" and ev_c == "permanent" and (
             text_sim >= th.dead_source_confirmed_text_similarity
             or (t_url and c_url and t_url.identity_key == c_url.identity_key and text_sim >= 0.35)
         ):

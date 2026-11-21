@@ -9,7 +9,7 @@ import math
 import re
 import unicodedata
 from collections import Counter
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, unquote, urlencode, urlparse, urlsplit
 
 from .models import NormalizedUrl
 
@@ -180,20 +180,34 @@ def normalize_url(raw_value: str) -> NormalizedUrl | None:
     cleaned = re.sub(r"^htpp://", "http://", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"^(https?)//:", r"\1://", cleaned, flags=re.IGNORECASE)
 
+    # Never store URL authority credentials in NormalizedUrl
+    cleaned = re.sub(r"^(https?://)[^/@\s]+@", r"\1", cleaned, flags=re.IGNORECASE)
     had_scheme = bool(re.match(r"^[a-z][a-z0-9+.-]*://", cleaned, flags=re.IGNORECASE))
+    if not had_scheme:
+        cleaned = re.sub(r"^[^/\s@:]+:[^/\s@]+@", "", cleaned)
     candidate = cleaned if had_scheme else f"https://{cleaned}"
 
     try:
         parsed = urlparse(candidate)
+        raw_port = parsed.port
     except ValueError:
         return None
 
     if parsed.scheme.lower() not in ("http", "https"):
         return None
 
-    host = (parsed.hostname or "").strip().lower().rstrip(".")
-    # Strip www. / www2. / m. prefix only when there are still >= 2 labels left
-    stripped_host = re.sub(r"^(?:www\d*|m)\.", "", host)
+    raw_host = (parsed.hostname or "").strip().lower().rstrip(".")
+    norm_port = raw_port if raw_port not in (None, 80, 443) else None
+
+    # Strip ONLY www. for exact destination identity; keep www2., m., pt., en., api., v1., etc.
+    exact_host = raw_host
+    stripped_www = re.sub(r"^www\.", "", raw_host)
+    if "." in stripped_www:
+        exact_host = stripped_www
+
+    # Strip www. / www2. / m. prefix for general site grouping
+    host = raw_host
+    stripped_host = re.sub(r"^(?:www\d*|m)\.", "", raw_host)
     if "." in stripped_host:
         host = stripped_host
 
@@ -219,24 +233,36 @@ def normalize_url(raw_value: str) -> NormalizedUrl | None:
             is_valid_domain=False,
             is_shared_host=False,
             raw_identifier=cleaned.lower(),
+            destination_key=f"id:{ident}",
+            exact_host="",
+            subdomain="",
+            port=None,
         )
 
-    reg_domain = _compute_registrable_domain(host)
-    is_shared = (reg_domain in SHARED_HOST_DOMAINS) or (host in SHARED_HOST_DOMAINS)
+    reg_domain = _compute_registrable_domain(exact_host)
+    subdomain = (
+        exact_host[: -(len(reg_domain) + 1)]
+        if exact_host.endswith("." + reg_domain) and exact_host != reg_domain
+        else ""
+    )
+    is_shared = (reg_domain in SHARED_HOST_DOMAINS) or (exact_host in SHARED_HOST_DOMAINS) or (host in SHARED_HOST_DOMAINS)
     host_stem = reg_domain.split(".", 1)[0]
 
     # Normalize path (strip trailing slashes; preserve meaningful segments)
     path = re.sub(r"/+", "/", parsed.path or "/").strip("/")
     norm_path = f"/{path}" if path else "/"
+    dest_path = norm_path.lower() if norm_path != "/" else ""
+    port_part = f":{norm_port}" if norm_port else ""
+    destination_key = f"dest:{exact_host}{port_part}{dest_path}"
 
-    # Build canonical identity key:
+    # Build canonical general site identity key:
     # - For shared hosting (github.io, t.me, blogspot, workers.dev), keep subdomain + 1st path segment if community host.
     if is_shared:
         if host in ("t.me", "telegram.me", "discord.gg", "discord.com", "linktr.ee", "sites.google.com"):
             first_seg = path.split("/", 1)[0].lower() if path else ""
             identity_key = f"shared:{host}/{first_seg}".rstrip("/")
         else:
-            identity_key = f"shared:{host}"
+            identity_key = f"shared:{exact_host}"
     else:
         identity_key = f"domain:{reg_domain}"
 
@@ -251,6 +277,10 @@ def normalize_url(raw_value: str) -> NormalizedUrl | None:
         is_valid_domain=True,
         is_shared_host=is_shared,
         raw_identifier=cleaned.lower(),
+        destination_key=destination_key,
+        exact_host=exact_host,
+        subdomain=subdomain,
+        port=norm_port,
     )
 
 
@@ -548,6 +578,13 @@ def sanitize_for_markdown(value: str, max_len: int = 120) -> str:
     text = text.replace("<!--", "").replace("-->", "")
     text = re.sub(r"<[^>]*>", " ", text)
     text = re.sub(r"[\r\n\t\x00-\x1f\x7f]+", " ", text)
+    # Redact embedded URL credentials and sensitive query secrets
+    text = re.sub(r"(https?://)[^/\s:@]+:[^/\s@]+@", r"\1[REDACTED]@", text, flags=re.IGNORECASE)
+    text = re.sub(
+        r"(?i)\b(token|api_key|apikey|access_token|refresh_token|secret|password|passwd|pwd|auth|authorization|session_id|sig|signature|jwt|bearer)=([^&\s)\]]+)",
+        r"\1=[REDACTED]",
+        text,
+    )
     # Neutralize @mentions so bots never ping unintended users
     text = re.sub(r"@([A-Za-z0-9_-]+)", "@\u200b\\1", text)
     # Neutralize markdown links/images and heading characters
@@ -689,22 +726,33 @@ def normalize_language_code(raw_lang: str, *, allow_short_iso: bool = False) -> 
     return frozenset(codes)
 
 
+def _map_locale_label(label: str) -> str:
+    tok = (label or "").strip().lower()
+    if tok in ("pt", "pt-br", "br"):
+        return "pt"
+    if tok in ("en", "en-us", "en-gb"):
+        return "en"
+    if tok in ("es", "es-la"):
+        return "es"
+    if tok in ("ru", "ja", "jp", "ko", "zh", "fr", "it", "de"):
+        return "ja" if tok == "jp" else tok
+    return ""
+
+
 def extract_url_locale(url: NormalizedUrl | None) -> str:
-    """Extract an explicit leading locale segment from URL path (e.g. '/pt/' -> 'pt')."""
+    """Extract an explicit leading path locale ('/br/', '/pt/') or subdomain locale ('pt.', 'en.')."""
     if not url or not url.is_valid_domain:
         return ""
     path = (url.normalized_path or "").strip("/").lower()
-    if not path:
-        return ""
-    first = path.split("/", 1)[0]
-    if first in ("pt", "pt-br"):
-        return "pt"
-    if first in ("en", "en-us", "en-gb"):
-        return "en"
-    if first in ("es", "es-la"):
-        return "es"
-    if first in ("ru", "ja", "jp", "ko", "zh", "fr", "it", "de"):
-        return "ja" if first == "jp" else first
+    if path:
+        mapped = _map_locale_label(path.split("/", 1)[0])
+        if mapped:
+            return mapped
+    if url.subdomain:
+        for seg in url.subdomain.split("."):
+            mapped = _map_locale_label(seg)
+            if mapped:
+                return mapped
     return ""
 
 
@@ -805,27 +853,79 @@ _CHAPTER_COUNT_NOISE_RE = re.compile(
 )
 
 
+_NON_WORK_TITLE_TOKENS = frozenset({
+    "erro", "erros", "error", "errors", "problema", "problemas", "bug", "bugs",
+    "falha", "falhas", "leitor", "capitulo", "capitulos", "pagina", "paginas",
+    "imagem", "imagens", "capa", "capas", "sinopse", "titulo", "titulos",
+    "video", "videos", "player", "busca", "pesquisa", "filtro", "filtros",
+    "login", "conta", "autenticacao", "catalogo", "popular", "populares",
+    "recentes", "historico", "favoritos", "biblioteca", "download", "downloads",
+    "lentidao", "lento", "atualizacao", "instalacao", "metadados", "detalhes",
+    "fonte", "extensao", "extensoes", "site", "app", "aplicativo", "api",
+    "endpoint", "endpoints", "rota", "http", "https", "json", "cloudflare",
+    "timeout", "ssl", "dns", "nxdomain", "mihon", "aniyomi", "komikku",
+    "suwayomi", "tadami", "reikai", "kotatsu", "tachiyomi", "todas", "todos",
+    "qualquer", "nenhum", "nenhuma", "sem", "nao", "carrega", "abre", "funciona",
+    "reproduz", "pages", "found", "unknown", "resolver", "host", "avatar",
+    "perfil", "episodio", "episodios", "ep", "cap", "lista", "listagem",
+    "buffer", "audio", "legenda", "legendas", "vip", "paywall", "get", "post",
+    "portugues", "ingles", "espanhol", "japones", "english", "spanish",
+    "webview", "android", "windows", "linux", "github", "discord", "chrome",
+})
+
+_NON_WORK_LEADING_TOKENS = frozenset({
+    "ao", "quando", "para", "pra", "com", "em", "na", "no", "da", "de", "do",
+    "dos", "das", "um", "uma", "o", "a", "os", "as", "e", "ou", "que", "se", "por",
+    "erro", "falha", "problema", "bug", "nao", "sem", "extensao", "site",
+    "app", "http", "https", "json", "endpoint", "rota", "player", "leitor",
+    "busca", "pesquisa", "login", "capitulo", "capitulos", "cap", "episodio",
+    "episodios", "ep", "pagina", "paginas", "todas", "todos", "alguma", "algum",
+    "qualquer", "nenhum", "nenhuma", "tentar", "abrir", "ler", "baixar",
+    "entrar", "selecionar", "clicar", "acessar", "ir",
+})
+
+_NON_WORK_NAVIGATION_WORDS = frozenset({
+    "tentar", "clicar", "selecionar", "entrar", "abrir", "baixar",
+    "qualquer", "nenhum", "nenhuma", "todas", "todos", "alguma", "algum",
+})
+
+
+def _is_valid_work_candidate(cand: str, ext_compact: str) -> str:
+    norm = re.sub(r"\s+", " ", re.sub(r"[^\w\s'-]", " ", strip_accents(cand or "").lower())).strip()
+    if not norm:
+        return ""
+    toks = norm.split()
+    if not (1 <= len(toks) <= 6):
+        return ""
+    if toks[0] in _NON_WORK_LEADING_TOKENS or toks[0].isdigit():
+        return ""
+    if any(t in _NON_WORK_NAVIGATION_WORDS for t in toks):
+        return ""
+    if len(toks) == 1 and (toks[0].endswith(("exception", "error")) or toks[0] in _NON_WORK_TITLE_TOKENS or len(toks[0]) < 2):
+        return ""
+    if all((t in _NON_WORK_TITLE_TOKENS or t in _GENERIC_WORK_HINTS or t.isdigit()) for t in toks):
+        return ""
+    if ext_compact and compact_name(norm) == ext_compact:
+        return ""
+    if len(compact_name(norm)) < 2:
+        return ""
+    return norm
+
+
 def extract_specific_work_hint(title_symptom: str, description: str, extension_name: str = "") -> str:
     """Extract a specific manga/anime title hint when issue scopes the problem to one work."""
-    raw_marked = re.sub(r"\bdá\b", " verbda ", f"{title_symptom} {description}", flags=re.IGNORECASE)
-    combined = re.sub(
-        r"[.,;:!?]+(?=\s|$)",
-        " ",
-        normalize_text(raw_marked, preserve_urls=False),
-    )
-    combined = re.sub(r"\s+", " ", combined).strip()
     patterns = (
         re.compile(
             r"\b(?:apenas|so|somente)\s+(?:na|no|em)\s+(?:obra|manga|anime|manhwa|manhua|webtoon)\s+"
             r"([a-z0-9][a-z0-9\s'-]{1,32}?)(?=\s+(?:da|de|do|dos|das|verbda|esta|estao|nao|capitulo|capitulos|episodio|episodios|erro|aparece|acontece|apresenta|retorna|falha|carrega|no|na|para|ao|com|e)\b|$)"
         ),
         re.compile(
-            r"\b(?:capitulos?|cap\.?|episodios?|ep\.?)\s*#?\d+(?:\.\d+)?\s+(?:de|da|do)\s+(?:obra\s+|manga\s+|anime\s+|manhwa\s+)?"
+            r"(?:/(?:chapters?|episodes?)/|\b(?:capitulos?|cap\.?|episodios?|ep\.?)\s*#?)\d+(?:\.\d+)?\s+(?:de|da|do)\s+(?:obra\s+|manga\s+|anime\s+|manhwa\s+)?"
             r"([a-z0-9][a-z0-9\s'-]{1,30}?)(?=\s+(?:verbda|no|na|ao|quando|esta|estao|nao|aparece|acontece|apresenta|retorna|falha|carrega|com|dando|em|para|e)\b|$)"
         ),
         re.compile(
             r"\b(?:na|da|do|de|pela)\s+obra\s+([a-z0-9][a-z0-9\s'-]{1,30}?)"
-            r"(?=\s+(?:verbda|no|na|ao|quando|esta|estao|nao|aparece|acontece|apresenta|retorna|falha|carrega|com|dando|da|de|do|em|para|e|retornando)\b|$)"
+            r"(?=\s+(?:verbda|no|na|ao|quando|esta|estao|nao|aparece|acontece|apresenta|retorna|falha|carrega|com|dando|da|de|do|em|para|e|retornando|abrir|clicar|selecionar)\b|$)"
         ),
         re.compile(
             r"\b(?:no|do)\s+(?:manga|anime|manhwa|manhua|webtoon)\s+([a-z0-9][a-z0-9\s'-]{1,30}?)"
@@ -837,16 +937,55 @@ def extract_specific_work_hint(title_symptom: str, description: str, extension_n
         ),
     )
     ext_compact = compact_name(extension_name)
-    for pat in patterns:
-        m = pat.search(combined)
-        if m:
-            hint = re.sub(r"\s+", " ", m.group(1)).strip()
-            if not hint or hint in _GENERIC_WORK_HINTS:
-                continue
-            if ext_compact and compact_name(hint) == ext_compact:
-                continue
-            if len(compact_name(hint)) >= 2:
+    chunks: list[str] = []
+    for src in (title_symptom or "", description or ""):
+        for piece in re.split(r"[\r\n]+|(?<=[.!?;])\s+|(?<=[a-z0-9])->|\s->\s", src):
+            piece_s = piece.strip()
+            if piece_s:
+                chunks.append(piece_s)
+    if not chunks:
+        chunks.append(f"{title_symptom} {description}")
+
+    for chunk in chunks:
+        raw_marked = re.sub(r"\bdá\b", " verbda ", chunk, flags=re.IGNORECASE)
+        combined = re.sub(
+            r"[.,;:!?]+(?=\s|$)",
+            " ",
+            normalize_text(raw_marked, preserve_urls=False),
+        )
+        combined = re.sub(r"\s+", " ", combined).strip()
+        for pat in patterns:
+            m = pat.search(combined)
+            if m:
+                hint = _is_valid_work_candidate(m.group(1), ext_compact)
+                if hint:
+                    return hint
+        m_cap_em = re.search(
+            r"\bem\s+([A-ZÀ-Ý][A-Za-zÀ-ÿ0-9'-]{2,20}(?:\s+(?:[A-ZÀ-Ý0-9][A-Za-zÀ-ÿ0-9'-]{1,20}|of|the|no|de|da)){0,3})\s*[.,;:!?]*$",
+            chunk.strip(),
+        )
+        if m_cap_em:
+            hint = _is_valid_work_candidate(m_cap_em.group(1), ext_compact)
+            if hint:
                 return hint
+
+    # Also extract work references placed directly in the title ("Naruto não carrega", "One Piece — No pages found")
+    clean_ts = strip_accents(title_symptom or "").strip()
+    if clean_ts:
+        parts_ts = re.split(r"\s+(?:—|–|-|:)\s+", clean_ts, maxsplit=1)
+        if len(parts_ts) == 2:
+            left = _is_valid_work_candidate(parts_ts[0], ext_compact)
+            if left:
+                return left
+        norm_ts = normalize_text(re.sub(r"\bdá\b", " verbda ", title_symptom or "", flags=re.IGNORECASE), preserve_urls=False)
+        m_title = re.match(
+            r"^([a-z0-9][a-z0-9\s'-]{1,34}?)\s+(?:nao\s+(?:carrega|abre|funciona|reproduz|aparece)|esta\s+sem\s+(?:paginas?|capitulos?)|sem\s+(?:paginas?|capitulos?)|no\s+pages\s+found|com\s+(?:erro|falha|problema)|capitulos?\s+errados?|fora\s+de\s+ordem)\b",
+            norm_ts,
+        )
+        if m_title:
+            cand_w = _is_valid_work_candidate(m_title.group(1), ext_compact)
+            if cand_w:
+                return cand_w
     return ""
 
 
@@ -859,7 +998,7 @@ def extract_chapter_numbers(text: str) -> frozenset[str]:
     nums: set[str] = set()
     for pat in (
         re.compile(r"\b(?:capitulo|cap\.?)\s*#?(\d+(?:\.\d+)?)\b", re.IGNORECASE),
-        re.compile(r"/chapters?/(\d+(?:\.\d+)?)(?:\b|/|$)", re.IGNORECASE),
+        re.compile(r"/chapters?/(\d+(?:\.\d+)?)(?:\b|/|\?|$)", re.IGNORECASE),
     ):
         for m in pat.finditer(scrubbed):
             nums.add(m.group(1))
@@ -874,37 +1013,175 @@ def extract_episode_numbers(text: str) -> frozenset[str]:
     nums: set[str] = set()
     for pat in (
         re.compile(r"\b(?:episodio|ep\.?)\s*#?(\d+(?:\.\d+)?)\b", re.IGNORECASE),
-        re.compile(r"/episodes?/(\d+(?:\.\d+)?)(?:\b|/|$)", re.IGNORECASE),
+        re.compile(r"/episodes?/(\d+(?:\.\d+)?)(?:\b|/|\?|$)", re.IGNORECASE),
     ):
         for m in pat.finditer(norm):
             nums.add(m.group(1))
     return frozenset(nums)
 
 
+_API_PATH_PREFIX_RE = re.compile(
+    r"^/(?:api|v\d+(?:\.\d+)?|graphql|gql|rest|rpc|ajax|wp-json|chapters?|episodes?|search|details?|auth|login|token|stream|manifest|hls|maintenance)(?:/|$)",
+    re.IGNORECASE,
+)
+_STATIC_OR_ASSET_SUFFIX_RE = re.compile(
+    r"\.(?:png|jpg|jpeg|webp|gif|svg|ico|css|js|woff2?|ttf|apk|zip|txt|log)$",
+    re.IGNORECASE,
+)
+_SENSITIVE_QUERY_KEYS = frozenset({
+    "token", "api_key", "apikey", "access_token", "refresh_token",
+    "auth", "authorization", "key", "secret", "password", "passwd", "pwd",
+    "session", "session_id", "sid", "sig", "signature", "jwt", "bearer", "cookie",
+})
+_VOLATILE_QUERY_KEYS = frozenset({
+    "_", "_t", "t", "ts", "timestamp", "cachebuster", "cb", "_cb",
+    "nocache", "rand", "nonce", "utm_source", "utm_medium", "utm_campaign",
+    "utm_term", "utm_content", "fbclid", "gclid",
+})
+
+
+def _looks_like_secret_value(val: str) -> bool:
+    s = (val or "").strip()
+    if re.match(r"^eyJ[A-Za-z0-9_-]{8,}", s):
+        return True
+    if len(s) >= 24 and re.fullmatch(r"[A-Za-z0-9_.-]+", s) and any(c.isdigit() for c in s) and any(c.isalpha() for c in s):
+        return True
+    return False
+
+
+def _canonicalize_endpoint(raw_path_and_query: str) -> str | None:
+    cleaned = unquote(str(raw_path_and_query or "").strip("<>\"'`.,;!?) "))
+    if not cleaned:
+        return None
+    if re.match(r"^(?:java|android|kotlin|kotlinx|okhttp3|retrofit2|org\.json)\.", cleaned, re.IGNORECASE):
+        return None
+    try:
+        sp = urlsplit(cleaned if cleaned.startswith("/") else f"/{cleaned.lstrip('/')}")
+    except ValueError:
+        return None
+    raw_path = re.sub(r"/+", "/", sp.path or "/").strip("/")
+    if not raw_path:
+        return None
+    if _STATIC_OR_ASSET_SUFFIX_RE.search(raw_path):
+        return None
+    norm_segs: list[str] = []
+    for seg in raw_path.split("/"):
+        if _looks_like_secret_value(seg):
+            norm_segs.append("<redacted>")
+        else:
+            norm_segs.append(seg.lower())
+    canon_path = "/" + "/".join(norm_segs)
+    if len(canon_path) < 3:
+        return None
+
+    kept_params: list[tuple[str, str]] = []
+    if sp.query:
+        for k, v in parse_qsl(sp.query, keep_blank_values=True):
+            kl = k.strip().lower()
+            if not kl or kl in _SENSITIVE_QUERY_KEYS or kl in _VOLATILE_QUERY_KEYS:
+                continue
+            vl = "<redacted>" if _looks_like_secret_value(v) else v.strip().lower()
+            kept_params.append((kl, vl))
+    if kept_params:
+        kept_params.sort()
+        return f"{canon_path}?{urlencode(kept_params, safe='/')}"
+    return canon_path
+
+
 def extract_api_endpoints(text: str) -> frozenset[str]:
-    """Extract technical HTTP routes / API endpoint paths mentioned in bug reports."""
-    norm = normalize_text(text, preserve_urls=True)
-    if not norm:
+    """Extract normalized technical HTTP routes / API endpoints (including full URLs) without leaking secrets."""
+    if not text:
         return frozenset()
-    # Strip full URLs scheme+host so URL root paths like https://site.com/pt/ don't pollute API endpoints
-    # while keeping explicit paths after domains if they match known API prefixes
+    pre = _IMG_OR_HTML_RE.sub(" ", str(text))
+    pre = _MD_LINK_RE.sub(r" \1 \2 ", pre)
+    pre = pre.replace("`", " ")
+    # Normalize common scheme typos inside URLs before extraction
+    pre = re.sub(r"\bhtpps?://", "https://", pre, flags=re.IGNORECASE)
+    pre = re.sub(r"\b(https?)//:", r"\1://", pre, flags=re.IGNORECASE)
+
     endpoints: set[str] = set()
-    patterns = (
-        re.compile(r"\b(?:get|post|put|delete|patch)\s+(/[a-z0-9._/-]{2,64})\b", re.IGNORECASE),
-        re.compile(
-            r"(?:^|[\s('\"/])(/(?:api|v\d+|graphql|fetch[a-z0-9_]*|chapters?|episodes?|search|manga|anime|auth|login|maintenance)(?:/[a-z0-9._-]+)+)",
-            re.IGNORECASE,
-        ),
-        re.compile(
-            r"\b(?:endpoint|rota|chamada|path)\s+(/?[a-z0-9._-]+(?:/[a-z0-9._-]+)+)",
-            re.IGNORECASE,
-        ),
-    )
-    for pat in patterns:
-        for m in pat.finditer(norm):
-            ep = "/" + m.group(1).strip().lstrip("/").rstrip("/")
-            if len(ep) >= 3:
-                endpoints.add(ep.lower())
+    url_spans: list[tuple[int, int]] = []
+
+    verb_prefix_re = re.compile(r"\b(GET|POST|PUT|DELETE|PATCH)\s+(?:para\s+|to\s+|em\s+|on\s+|at\s+)?$", re.IGNORECASE)
+    cue_prefix_re = re.compile(r"\b(?:endpoint|rota|chamada|path|requisi[cç][aã]o|request|consultar|consultando)\s*(?:=|:|em|para|to)?\s*$", re.IGNORECASE)
+
+    # 1. Extract API endpoints embedded inside full HTTP/HTTPS URLs
+    for m in re.finditer(r"https?://[^\s<>\"'()\]]+", pre, flags=re.IGNORECASE):
+        raw_u = m.group(0).rstrip(".,;:!?)>\"'")
+        url_spans.append((m.start(), m.end()))
+        before = pre[max(0, m.start() - 32) : m.start()]
+        vm = verb_prefix_re.search(before)
+        verb = vm.group(1).lower() if vm else ""
+        has_cue = bool(vm or cue_prefix_re.search(before))
+
+        try:
+            u_clean = re.sub(r"^(https?://)[^/@\s]+@", r"\1", raw_u, flags=re.IGNORECASE)
+            sp = urlsplit(u_clean)
+            host_check = (sp.hostname or "").strip().lower().rstrip(".")
+        except ValueError:
+            continue
+        if not host_check or host_check in IGNORED_ATTACHMENT_HOSTS:
+            continue
+        exact_host = host_check
+        stripped_www = re.sub(r"^www\.", "", host_check)
+        if "." in stripped_www:
+            exact_host = stripped_www
+
+        raw_pq = sp.path or "/"
+        if sp.query:
+            raw_pq = f"{raw_pq}?{sp.query}"
+        is_api_host = exact_host.startswith(("api.", "graphql.", "gateway.", "backend."))
+        if not (_API_PATH_PREFIX_RE.match(sp.path or "") or (is_api_host and raw_pq != "/") or (has_cue and raw_pq != "/")):
+            continue
+        canon_ep = _canonicalize_endpoint(raw_pq)
+        if canon_ep:
+            endpoints.add(canon_ep)
+            endpoints.add(f"ephost:{exact_host}")
+            if verb:
+                endpoints.add(f"method:{verb}:{canon_ep}")
+
+    # Mask out full URL spans before scanning relative/isolated paths so host names or URL fragments aren't double-parsed
+    masked = list(pre)
+    for s_idx, e_idx in url_spans:
+        for i in range(s_idx, e_idx):
+            masked[i] = " "
+    rel_src = strip_accents("".join(masked))
+
+    # 2. HTTP method + relative or root path
+    for m in re.finditer(
+        r"\b(GET|POST|PUT|DELETE|PATCH)\s+(?:para\s+|to\s+|em\s+|on\s+|at\s+)?(/?[a-zA-Z0-9._~%-]+(?:/[a-zA-Z0-9._~%-]+)*(?:\?[^\s<>\"'()\]]+)?)",
+        rel_src,
+        flags=re.IGNORECASE,
+    ):
+        verb = m.group(1).lower()
+        cand_ep = m.group(2)
+        if "/" not in cand_ep:
+            continue
+        canon_ep = _canonicalize_endpoint(cand_ep)
+        if canon_ep:
+            endpoints.add(canon_ep)
+            endpoints.add(f"method:{verb}:{canon_ep}")
+
+    # 3. Explicit cues ("endpoint /...", "rota graphql/chapters", "chamada v2/chapters")
+    for m in re.finditer(
+        r"\b(?:endpoint|rota|chamada|path|requisi[cç][aã]o|request)\s*(?:=|:|em|para|to)?\s*(/?[a-zA-Z0-9._~%-]+(?:/[a-zA-Z0-9._~%-]+)+(?:\?[^\s<>\"'()\]]+)?)",
+        rel_src,
+        flags=re.IGNORECASE,
+    ):
+        canon_ep = _canonicalize_endpoint(m.group(1))
+        if canon_ep:
+            endpoints.add(canon_ep)
+
+    # 4. Standalone technical paths starting with API prefixes (e.g. /api/search, /api/v2/chapters?page=1, /maintenance/blocked)
+    for m in re.finditer(
+        r"(?:^|[\s('\"=,])(/(?:api|v\d+(?:\.\d+)?|graphql|gql|rest|rpc|ajax|wp-json|chapters?|episodes?|search|details?|auth|login|token|stream|manifest|hls|maintenance)(?:/[a-zA-Z0-9._~%-]+)+(?:\?[^\s<>\"'()\]]+)?)",
+        rel_src,
+        flags=re.IGNORECASE,
+    ):
+        canon_ep = _canonicalize_endpoint(m.group(1))
+        if canon_ep:
+            endpoints.add(canon_ep)
+
     return frozenset(endpoints)
 
 
