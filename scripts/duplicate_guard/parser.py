@@ -236,7 +236,25 @@ def _detect_ext_type(raw: RawIssue, sections: dict[str, str]) -> str | None:
     return None
 
 
-def _parse_affected_parts(sections: dict[str, str], ext_type: str | None) -> frozenset[str]:
+_FREE_TEXT_PART_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("reader", re.compile(r"\b(?:no\s+leitor|ao\s+abrir\s+(?:o\s+)?leitor|abre\s+o\s+leitor|paginas?\s+nao\s+carregam?|no\s+pages\s+found|ler\s+(?:os?\s+|algum\s+)?capitulo|imagens?\s+(?:nao\s+carregam|em\s+branco|quebradas))\b", re.I)),
+    ("login", re.compile(r"\b(?:fazer\s+login|no\s+login|erro\s+(?:de|no)\s+login|autentic\w*|minha\s+conta|fazer\s+cadastro|logar\s+na\s+conta)\b", re.I)),
+    ("chapters", re.compile(r"\b(?:baixar\s+capitulos?|download\s+(?:de|dos)\s+capitulos?|lista\s+de\s+capitulos?|olhar\s+(?:os\s+)?capitulos?|nenhum\s+capitulo|faltando\s+capitulos?|ao\s+baixar)\b", re.I)),
+    ("search", re.compile(r"\b(?:na\s+busca|na\s+pesquisa|ao\s+(?:buscar|pesquisar)|pesquisa\s+nao\s+retorna|busca\s+quebrada|filtros?\s+de\s+busca)\b", re.I)),
+    ("catalog", re.compile(r"\b(?:no\s+catalogo|aba\s+(?:popular|recentes)|listagem\s+inicial|tela\s+inicial)\b", re.I)),
+    ("video", re.compile(r"\b(?:reproduzir\s+(?:video|episodio)|no\s+player|video\s+nao\s+carrega|episodios?\s+nao\s+reproduz)\b", re.I)),
+    ("install", re.compile(r"\b(?:nao\s+instala|erro\s+ao\s+(?:instalar|atualizar)\s+(?:a\s+)?extensao)\b", re.I)),
+)
+
+
+def _infer_parts_from_free_text(free_text: str) -> set[str]:
+    norm = normalize_text(free_text, preserve_urls=False)
+    if not norm:
+        return set()
+    return {part for part, pat in _FREE_TEXT_PART_PATTERNS if pat.search(norm)}
+
+
+def _parse_affected_parts(sections: dict[str, str], ext_type: str | None, *, free_text: str = "") -> frozenset[str]:
     parts: set[str] = set()
     raw_part = strip_accents(sections.get("affected_part", "")).lower().strip()
     if raw_part:
@@ -255,6 +273,13 @@ def _parse_affected_parts(sections: dict[str, str], ext_type: str | None) -> fro
                     parts.add("video" if ext_type == "Anime" else "reader")
                 elif mapped:
                     parts.add(mapped)
+
+    # When explicit field was omitted or marked 'Outro', infer concrete part mentions from free text
+    if not (parts - {"other"}) and free_text:
+        inferred = _infer_parts_from_free_text(free_text)
+        if inferred:
+            parts.discard("other")
+            parts.update(inferred)
     return frozenset(parts)
 
 
@@ -330,10 +355,18 @@ def parse_issue(raw: RawIssue, known_extensions: frozenset[str] = frozenset()) -
     if not name and category in (CATEGORY_NEW_EXTENSION, CATEGORY_DOMAIN_CHANGE, CATEGORY_DEAD_SOURCE):
         name = clean_title
     elif not name and category == CATEGORY_BUG:
-        # Handle legacy "[Bug]: TaimuMangas, Erro..." or "[Problema na extensão]: Bakai — ..."
+        # Handle legacy "[Bug]: TaimuMangas, Erro..." or natural titles without ### Name
         m_sep = re.split(r"\s*[—,-]\s*", clean_title, maxsplit=1)
         if m_sep and m_sep[0] and len(m_sep[0]) <= 40:
             name = m_sep[0].strip()
+        else:
+            m_nat = re.match(
+                r"^(?:extens[aã]o\s+)?([A-Za-z0-9À-ÿ][A-Za-z0-9À-ÿ ._-]{1,32}?)\s+(?:n[aã]o\s+|est[aá]\s+|apresenta\b|parou\b|com\s+erro|com\s+problema|dando\b|erro\b|http\b)",
+                clean_title,
+                flags=re.IGNORECASE,
+            )
+            if m_nat:
+                name = m_nat.group(1).strip()
 
     compact = compact_name(name) or name_without_tld(name)
     dist_tokens = distinctive_name_tokens(name)
@@ -365,16 +398,20 @@ def parse_issue(raw: RawIssue, known_extensions: frozenset[str] = frozenset()) -
     version_raw = sections.get("extension_version", "").strip()
     version_tuple = parse_version(version_raw)
     app_name = sections.get("app_name", "").strip()
-    affected_parts = _parse_affected_parts(sections, ext_type)
-
-    related_ext = ""
-    if category == CATEGORY_ENHANCEMENT:
-        related_ext = _infer_related_extension_for_enhancement(sections, clean_title, summary, known_extensions)
 
     # Remove extension name prefix from clean_title for text comparison in bugs
     title_symptom = clean_title
     if name:
         title_symptom = re.sub(rf"^{re.escape(name)}\s*[-—:,]\s*", "", title_symptom, flags=re.IGNORECASE).strip()
+
+    free_parts_text = "\n".join(
+        p for p in (title_symptom, description, reproduction, additional_info) if p
+    )
+    affected_parts = _parse_affected_parts(sections, ext_type, free_text=free_parts_text)
+
+    related_ext = ""
+    if category == CATEGORY_ENHANCEMENT:
+        related_ext = _infer_related_extension_for_enhancement(sections, clean_title, summary, known_extensions)
 
     combined_symptom_text = "\n".join(p for p in (title_symptom, description, reproduction, additional_info) if p)
     free_intent_text = "\n".join(

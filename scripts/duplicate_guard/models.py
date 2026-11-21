@@ -10,7 +10,7 @@ from typing import Literal
 
 Classification = Literal["no_match", "possible_duplicate", "confirmed_duplicate"]
 
-RULE_ENGINE_VERSION = "1.2.0"
+RULE_ENGINE_VERSION = "1.3.0"
 
 INTENT_CREATE_EXTENSION = "create_extension"
 INTENT_BUG_FIX = "bug_fix"
@@ -228,15 +228,19 @@ class CatalogExtension:
     catalog_repo: str
 
     def supports_languages(self, requested: frozenset[str]) -> bool:
-        """Return True when the published extension covers every requested language."""
+        """Return True only when published catalog metadata unambiguously covers every requested language."""
+        valid_catalog_langs = {lang for lang in self.languages if not lang.startswith("unknown:")}
+        if not valid_catalog_langs:
+            return False
+        if any(lang.startswith("unknown:") for lang in requested):
+            return False
         if not requested:
-            return True
-        if "all" in self.languages:
-            return True
+            return "all" in valid_catalog_langs
         if "all" in requested:
-            # Multi-language request cannot be considered fulfilled by single-language build
-            return len(self.languages - {"all"}) > 1
-        return requested <= self.languages
+            return "all" in valid_catalog_langs
+        if "all" in valid_catalog_langs:
+            return True
+        return requested <= valid_catalog_langs
 
     def to_summary_dict(self) -> dict:
         return {

@@ -7,9 +7,11 @@ from __future__ import annotations
 
 import re
 import sys
-from typing import Protocol
+from dataclasses import replace
+from typing import TYPE_CHECKING, Protocol
 
 from .github_client import GitHubApiError, PermissionDeniedError, RateLimitError
+from .matcher import evaluate_comment_clarifications
 from .models import (
     HUMAN_INTERVENTION_LABELS,
     INCOMPATIBLE_STATUS_LABELS_ON_DUPLICATE,
@@ -23,9 +25,14 @@ from .models import (
     ActionResult,
     GuardConfig,
     GuardDecision,
+    ParsedIssue,
     RawIssue,
 )
 from .normalize import sanitize_for_markdown
+from .parser import parse_issue
+
+if TYPE_CHECKING:
+    from .matcher import DuplicateMatcher
 
 MARKER_PREFIX = "<!-- nox-duplicate-guard:v1"
 _MARKER_RE = re.compile(
@@ -170,11 +177,18 @@ def render_comment_body(
             details = "\n\n**Análise semântica:**\n" + "\n".join(
                 f"- {sanitize_for_markdown(r, 220)}" for r in decision.reasons[:2]
             )
+        mismatch_note = ""
+        if decision.category_mismatch and decision.inferred_category in OFFICIAL_CATEGORY_LABELS:
+            form_label = OFFICIAL_CATEGORY_LABELS[decision.inferred_category]
+            mismatch_note = (
+                f"\n\n> **Observação de formulário:** o conteúdo da solicitação indica objetivo compatível com **{form_label}**. "
+                "Esta solicitação não foi marcada como duplicata e permanece aberta."
+            )
         return (
             f"{marker}\n"
             "Olá! Após a avaliação semântica atualizada desta solicitação, o **Nox Duplicate Guard** identificou "
             "que este pedido **não é duplicata** para fechamento automático e permanece **aberto** para triagem normal da equipe."
-            f"{details}"
+            f"{details}{mismatch_note}"
         )
 
     if decision.classification == "confirmed_duplicate" and action == "auto_closed":
@@ -298,11 +312,221 @@ class GuardActionExecutor:
         issues_by_number: dict[int, RawIssue],
         *,
         repo: str = "ProjectNox-org/project-nox-requests",
+        matcher: DuplicateMatcher | None = None,
     ) -> None:
         self.client = client
         self.config = config
         self.issues_by_number = issues_by_number
         self.repo = repo
+        self.matcher = matcher
+        self._known_extensions: frozenset[str] = (
+            frozenset(
+                p.compact_name for p in matcher.by_number.values() if p.compact_name and len(p.compact_name) >= 4
+            )
+            if matcher is not None
+            else frozenset()
+        )
+
+    def _fetch_live_canonical(self, canonical_num: int | None) -> tuple[RawIssue | None, str | None]:
+        """Fetch live canonical issue state, distinguishing rate limits from 404/inaccessible issues."""
+        if canonical_num is None:
+            return None, None
+        try:
+            raw_dict = self.client.get_issue(canonical_num)
+            return RawIssue.from_github_dict(raw_dict), None
+        except RateLimitError:
+            raise
+        except (PermissionDeniedError, GitHubApiError, KeyError) as exc:
+            return None, str(exc)
+
+    def _revalidate_live_decision(
+        self,
+        decision: GuardDecision,
+        live_issue: RawIssue,
+        comments: list[dict],
+    ) -> tuple[GuardDecision, ParsedIssue, ParsedIssue | None, str | None]:
+        """Re-parse target and canonical live, re-evaluate if edited, and enforce comment clarifications."""
+        live_parsed = parse_issue(live_issue, known_extensions=self._known_extensions)
+        canon_raw: RawIssue | None = None
+        canon_parsed: ParsedIssue | None = None
+        canon_err: str | None = None
+
+        if decision.canonical_issue is not None:
+            canon_raw, canon_err = self._fetch_live_canonical(decision.canonical_issue)
+            if canon_raw is not None:
+                canon_parsed = parse_issue(canon_raw, known_extensions=self._known_extensions)
+
+        target_edited = live_parsed.content_fingerprint != decision.fingerprint
+        canon_changed = False
+        if canon_err is not None and decision.match_kind != "already_fulfilled_creation":
+            canon_changed = True
+        elif canon_parsed is not None:
+            if self.matcher is not None and decision.canonical_issue in self.matcher.by_number:
+                prev_canon = self.matcher.by_number[decision.canonical_issue]
+                if canon_parsed.content_fingerprint != prev_canon.content_fingerprint:
+                    canon_changed = True
+            if decision.match_kind != "already_fulfilled_creation" and (
+                canon_raw.state != "open"  # type: ignore[union-attr]
+                or LABEL_DUPLICATE in canon_raw.labels  # type: ignore[union-attr]
+                or bool(set(canon_raw.labels) & OFFICIAL_RESOLUTION_LABELS)  # type: ignore[union-attr]
+            ):
+                canon_changed = True
+
+        active_decision = decision
+        if target_edited or canon_changed:
+            if self.matcher is not None:
+                self.issues_by_number[live_issue.number] = live_issue
+                self.matcher.reindex_issue(live_parsed)
+                if canon_raw is not None and canon_parsed is not None:
+                    self.issues_by_number[canon_raw.number] = canon_raw
+                    self.matcher.reindex_issue(canon_parsed)
+                active_decision = self.matcher.evaluate(live_parsed)
+                if active_decision.canonical_issue != decision.canonical_issue:
+                    if active_decision.canonical_issue is not None:
+                        new_c_raw, new_c_err = self._fetch_live_canonical(active_decision.canonical_issue)
+                        if new_c_raw is not None:
+                            canon_raw = new_c_raw
+                            canon_parsed = parse_issue(new_c_raw, known_extensions=self._known_extensions)
+                            self.issues_by_number[new_c_raw.number] = new_c_raw
+                            self.matcher.reindex_issue(canon_parsed)
+                            if (
+                                canon_parsed.content_fingerprint != decision.fingerprint
+                                and active_decision.match_kind != "already_fulfilled_creation"
+                                and (new_c_raw.state != "open" or LABEL_DUPLICATE in new_c_raw.labels)
+                            ):
+                                active_decision = replace(
+                                    active_decision,
+                                    classification="possible_duplicate",
+                                    should_auto_close=False,
+                                    blocked_reason="live_canonical_no_longer_open",
+                                )
+                        elif new_c_err and active_decision.match_kind != "already_fulfilled_creation":
+                            canon_parsed = None
+                            active_decision = replace(
+                                active_decision,
+                                classification="possible_duplicate",
+                                should_auto_close=False,
+                                blocked_reason="canonical_inaccessible_or_404",
+                            )
+                    else:
+                        canon_parsed = None
+                elif canon_err is not None and active_decision.classification == "confirmed_duplicate" and active_decision.match_kind != "already_fulfilled_creation":
+                    active_decision = replace(
+                        active_decision,
+                        classification="possible_duplicate",
+                        should_auto_close=False,
+                        blocked_reason="canonical_inaccessible_or_404",
+                    )
+            else:
+                stale_reason = "target_issue_edited_before_apply" if target_edited else "canonical_changed_before_apply"
+                if canon_err is not None and decision.match_kind != "already_fulfilled_creation":
+                    stale_reason = "canonical_inaccessible_or_404"
+                if active_decision.classification == "confirmed_duplicate":
+                    active_decision = replace(
+                        active_decision,
+                        classification="possible_duplicate",
+                        should_auto_close=False,
+                        blocked_reason=stale_reason,
+                        reasons=(*active_decision.reasons, f"Revalidação ao vivo impediu fechamento automático ({stale_reason})."),
+                    )
+
+        # Fallback canonical ParsedIssue lookup if not yet parsed
+        if canon_parsed is None and active_decision.canonical_issue is not None:
+            if self.matcher is not None and active_decision.canonical_issue in self.matcher.by_number:
+                canon_parsed = self.matcher.by_number[active_decision.canonical_issue]
+            elif active_decision.canonical_issue in self.issues_by_number:
+                canon_parsed = parse_issue(
+                    self.issues_by_number[active_decision.canonical_issue],
+                    known_extensions=self._known_extensions,
+                )
+
+        # Asymmetric comment clarifications (author/maintainer only): can ONLY downgrade/block, never promote
+        if active_decision.classification == "confirmed_duplicate":
+            clarif_blocked, clarif_reason = evaluate_comment_clarifications(
+                live_parsed,
+                canon_parsed,
+                comments,
+                catalog_ext_summary=active_decision.catalog_extension,
+                match_kind=active_decision.match_kind,
+            )
+            if clarif_blocked:
+                active_decision = replace(
+                    active_decision,
+                    classification="possible_duplicate",
+                    should_auto_close=False,
+                    blocked_reason=clarif_reason,
+                    reasons=(
+                        *active_decision.reasons,
+                        f"Esclarecimento do autor/mantenedor nos comentários preservou o ticket aberto ({clarif_reason}).",
+                    ),
+                )
+
+        return active_decision, live_parsed, canon_parsed, ("live_revalidated" if (target_edited or canon_changed) else None)
+
+    def _verify_concurrent_barrier(
+        self,
+        num: int,
+        expected_fp: str,
+        decision: GuardDecision,
+        canon_parsed: ParsedIssue | None,
+        own_comment_id: int | None,
+        allowed_resolution_label: str | None = None,
+    ) -> tuple[bool, str | None, RawIssue | None]:
+        """Re-fetch target, comments, and canonical right before label/close to prevent TOCTOU races."""
+        try:
+            fresh_raw = RawIssue.from_github_dict(self.client.get_issue(num))
+            fresh_comments = self.client.list_comments(num)
+        except (RateLimitError, PermissionDeniedError, GitHubApiError) as exc:
+            return False, f"concurrent_recheck_failed:{exc}", None
+
+        if fresh_raw.state != "open":
+            return False, "issue_already_closed_concurrently", fresh_raw
+        if has_manual_ignore_override(fresh_comments, live_issue=fresh_raw):
+            return False, "manual_override_added_concurrently", fresh_raw
+
+        protected = HUMAN_INTERVENTION_LABELS - {LABEL_DUPLICATE}
+        if allowed_resolution_label:
+            protected = protected - {allowed_resolution_label}
+        if set(fresh_raw.labels) & protected:
+            return False, "human_intervention_label_added_concurrently", fresh_raw
+
+        fresh_parsed = parse_issue(fresh_raw, known_extensions=self._known_extensions)
+        if fresh_parsed.content_fingerprint != expected_fp:
+            return False, "target_edited_during_execution", fresh_raw
+
+        # Check if another concurrent bot run already wrote an auto_closed comment
+        latest_bot, latest_meta = find_existing_bot_comment(fresh_comments, issue_number=num)
+        if latest_bot and own_comment_id is not None and int(latest_bot.get("id") or 0) != int(own_comment_id):
+            if latest_meta and latest_meta.get("action") == "auto_closed":
+                return False, "concurrent_bot_execution_detected", fresh_raw
+
+        live_parsed_curr = fresh_parsed
+        clarif_blocked, clarif_reason = evaluate_comment_clarifications(
+            live_parsed_curr,
+            canon_parsed,
+            fresh_comments,
+            catalog_ext_summary=decision.catalog_extension,
+            match_kind=decision.match_kind,
+        )
+        if clarif_blocked:
+            return False, f"clarification_added_during_execution:{clarif_reason}", fresh_raw
+
+        if decision.match_kind != "already_fulfilled_creation" and decision.canonical_issue is not None:
+            fresh_canon, canon_err = self._fetch_live_canonical(decision.canonical_issue)
+            if fresh_canon is None or canon_err is not None:
+                return False, "canonical_inaccessible_during_execution", fresh_raw
+            if (
+                fresh_canon.state != "open"
+                or LABEL_DUPLICATE in fresh_canon.labels
+                or bool(set(fresh_canon.labels) & OFFICIAL_RESOLUTION_LABELS)
+            ):
+                return False, "canonical_closed_or_marked_during_execution", fresh_raw
+            if canon_parsed is not None:
+                fresh_canon_parsed = parse_issue(fresh_canon, known_extensions=self._known_extensions)
+                if fresh_canon_parsed.content_fingerprint != canon_parsed.content_fingerprint:
+                    return False, "canonical_edited_during_execution", fresh_raw
+
+        return True, None, fresh_raw
 
     def _ensure_closed_duplicate_labels(
         self,
@@ -411,6 +635,21 @@ class GuardActionExecutor:
                     closed=True,
                     partial_errors=sanitized.partial_errors,
                 )
+
+        # Revalidate target & canonical live (catches mid-run edits, deleted canonicals, & author clarifications)
+        try:
+            decision, live_parsed, canon_parsed, _ = self._revalidate_live_decision(
+                decision, live_issue, comments
+            )
+        except (RateLimitError, PermissionDeniedError, GitHubApiError) as exc:
+            return ActionResult(
+                issue_number=num,
+                decision=decision.classification,
+                canonical_issue=decision.canonical_issue,
+                action_taken="api_error_skipped",
+                dry_run=self.config.dry_run,
+                skipped_reason=str(exc),
+            )
 
         # If no duplicate found and bot never commented before, do nothing.
         if decision.classification == "no_match":
@@ -560,6 +799,35 @@ class GuardActionExecutor:
                 partial_errors=(f"comment:{exc}",),
             )
 
+        # 2.5 Re-verify right before adding resolution label (guards edits between comment and label)
+        ok_mid, mid_reason, _ = self._verify_concurrent_barrier(
+            num,
+            live_parsed.content_fingerprint,
+            decision,
+            canon_parsed,
+            comment_id,
+        )
+        if not ok_mid:
+            # Recompute based on latest issue state in API if possible
+            try:
+                latest_mid = RawIssue.from_github_dict(self.client.get_issue(num))
+                downgraded_dec, mode_after = self._downgrade_decision_on_live_abort(decision, latest_mid)
+            except (RateLimitError, PermissionDeniedError, GitHubApiError):
+                downgraded_dec = replace(decision, classification="possible_duplicate", should_auto_close=False, blocked_reason=mid_reason)
+                mode_after = "commented"
+            self._downgrade_comment_after_failure(num, comment_id, downgraded_dec, partial_errors, mode=mode_after)
+            return ActionResult(
+                issue_number=num,
+                decision=downgraded_dec.classification,
+                canonical_issue=downgraded_dec.canonical_issue,
+                action_taken="aborted_concurrent_edit_before_label",
+                dry_run=False,
+                comment_id=comment_id,
+                closed=False,
+                skipped_reason=mid_reason,
+                partial_errors=tuple(partial_errors),
+            )
+
         # 3. Add official resolution label (Duplicado, or Concluído for standalone catalog fulfillment)
         added_res_now = False
         if target_res_label not in live_issue.labels:
@@ -580,6 +848,42 @@ class GuardActionExecutor:
                     comment_id=comment_id,
                     partial_errors=tuple(partial_errors),
                 )
+
+        # 3.5 Pre-close verification barrier (guards edits/comments/canonical changes between label and close)
+        ok_pre, pre_reason, _ = self._verify_concurrent_barrier(
+            num,
+            live_parsed.content_fingerprint,
+            decision,
+            canon_parsed,
+            comment_id,
+            allowed_resolution_label=target_res_label,
+        )
+        if not ok_pre:
+            if added_res_now:
+                try:
+                    self.client.remove_label(num, target_res_label)
+                    labels_added.clear()
+                except (RateLimitError, PermissionDeniedError, GitHubApiError) as rb_exc:
+                    partial_errors.append(f"rollback_label:{rb_exc}")
+            try:
+                latest_pre = RawIssue.from_github_dict(self.client.get_issue(num))
+                downgraded_dec, mode_after = self._downgrade_decision_on_live_abort(decision, latest_pre)
+            except (RateLimitError, PermissionDeniedError, GitHubApiError):
+                downgraded_dec = replace(decision, classification="possible_duplicate", should_auto_close=False, blocked_reason=pre_reason)
+                mode_after = "commented"
+            self._downgrade_comment_after_failure(num, comment_id, downgraded_dec, partial_errors, mode=mode_after)
+            return ActionResult(
+                issue_number=num,
+                decision=downgraded_dec.classification,
+                canonical_issue=downgraded_dec.canonical_issue,
+                action_taken="aborted_concurrent_edit_before_close",
+                dry_run=False,
+                comment_id=comment_id,
+                labels_added=tuple(labels_added),
+                closed=False,
+                skipped_reason=pre_reason,
+                partial_errors=tuple(partial_errors),
+            )
 
         # 4. Close issue with formal state_reason (rollback label if close fails)
         try:
@@ -639,17 +943,35 @@ class GuardActionExecutor:
             partial_errors=tuple(partial_errors),
         )
 
+    def _downgrade_decision_on_live_abort(
+        self,
+        decision: GuardDecision,
+        latest_raw: RawIssue | None,
+    ) -> tuple[GuardDecision, str]:
+        if latest_raw is not None and self.matcher is not None:
+            latest_parsed = parse_issue(latest_raw, known_extensions=self._known_extensions)
+            if latest_parsed.content_fingerprint != decision.fingerprint:
+                self.issues_by_number[latest_raw.number] = latest_raw
+                self.matcher.reindex_issue(latest_parsed)
+                re_dec = self.matcher.evaluate(latest_parsed)
+                if re_dec.classification == "no_match":
+                    return re_dec, "cleared"
+                return replace(re_dec, classification="possible_duplicate", should_auto_close=False), "commented"
+        return replace(decision, classification="possible_duplicate", should_auto_close=False), "commented"
+
     def _downgrade_comment_after_failure(
         self,
         issue_number: int,
         comment_id: int | None,
         decision: GuardDecision,
         partial_errors: list[str],
+        *,
+        mode: str = "commented",
     ) -> None:
         if not comment_id:
             return
         try:
-            fallback_body = render_comment_body(decision, "commented", self.issues_by_number, repo=self.repo)
+            fallback_body = render_comment_body(decision, mode, self.issues_by_number, repo=self.repo)
             self.client.update_comment(int(comment_id), fallback_body)
         except (RateLimitError, PermissionDeniedError, GitHubApiError) as exc:
             print(f"[Nox Duplicate Guard] Issue #{issue_number}: falha ao ajustar comentário após erro parcial: {exc}", file=sys.stderr)
