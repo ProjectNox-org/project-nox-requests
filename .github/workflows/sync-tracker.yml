@@ -1,0 +1,54 @@
+name: Sincronizar Tracker com Solicitações
+
+on:
+  issues:
+    types: [opened, edited, deleted, closed, reopened, labeled, unlabeled]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-project-nox-tracker
+  cancel-in-progress: false
+
+jobs:
+  dispatch-tracker-update:
+    if: ${{ !github.event.issue.pull_request }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disparar atualização do Project Nox Tracker
+        uses: actions/github-script@v9
+        env:
+          TRACKER_DISPATCH_TOKEN: ${{ secrets.TRACKER_DISPATCH_TOKEN }}
+        with:
+          script: |
+            const token = (process.env.TRACKER_DISPATCH_TOKEN || '').trim();
+            if (!token) {
+              core.warning(
+                'Segredo TRACKER_DISPATCH_TOKEN não configurado em ProjectNox-org/project-nox-requests. ' +
+                'Configure um Fine-Grained PAT ou token de GitHub App com permissão Contents: Read and write ' +
+                'restrita ao repositório ProjectNox-org/project-nox-tracker para habilitar a sincronização imediata.'
+              );
+              return;
+            }
+
+            const octokit = github.getOctokit(token);
+            const issueNumber = context.payload.issue ? context.payload.issue.number : null;
+            const action = context.payload.action || context.eventName;
+
+            await octokit.rest.repos.createDispatchEvent({
+              owner: 'ProjectNox-org',
+              repo: 'project-nox-tracker',
+              event_type: 'issues-updated',
+              client_payload: {
+                source_repo: `${context.repo.owner}/${context.repo.repo}`,
+                issue_number: issueNumber,
+                action,
+              },
+            });
+
+            console.log(
+              `repository_dispatch (issues-updated) enviado para ProjectNox-org/project-nox-tracker ` +
+              `(action=${action}, issue=${issueNumber ?? 'manual'}).`
+            );
