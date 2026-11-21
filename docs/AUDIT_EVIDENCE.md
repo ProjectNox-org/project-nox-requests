@@ -259,4 +259,21 @@ Resultados observados com o matcher completo após a correção:
     - `auto_close`: `tp=20`, **`fp=0`**, `fn=0`, `tn=83`, **`precision=1.0`**, **`recall=1.0`**.
     - `alert_or_close`: `tp=54`, **`fp=0`**, `fn=0`, `tn=49`, **`precision=1.0`**, **`recall=1.0`**.
     - `failures`: `[]`.
-- **Publicação e validação em produção (`v1.7.2`):** atualizadas na sequência após PR, merge, CodeQL, `backfill`/`reconcile` protegidos e `reconcile` real com cache hit.
+- **Publicação e validação em produção (`v1.7.2`):**
+  - **PR de implementação da `v1.7.2`:** [PR #170](https://github.com/ProjectNox-org/project-nox-requests/pull/170) (`2a33d88`) → merge em `main` no commit `f63537e7caf2009d82d9f4d60873d0dc1cb2c0a9`.
+  - **Checks no PR #170 (todos aprovados — `4/4`):**
+    - CI (`Executar Testes das Automações` / `test`): [Job 136814380844](https://github.com/ProjectNox-org/project-nox-requests/actions/runs/44893576435/job/136814380844) — `success`.
+    - CodeQL (`Analyze (actions)`): [Job 136814361804](https://github.com/ProjectNox-org/project-nox-requests/actions/runs/44893569482/job/136814361804) — `success`.
+    - CodeQL (`Analyze (python)`): [Job 136814362005](https://github.com/ProjectNox-org/project-nox-requests/actions/runs/44893569482/job/136814362005) — `success`.
+    - CodeQL Check Run: [Run 136814497304](https://github.com/ProjectNox-org/project-nox-requests/runs/136814497304) — `success`.
+  - **Workflows de `push` em `main` após merge do PR #170 (com `NOX_DUPLICATE_GUARD_AUTO_CLOSE=false`):**
+    - CI (`Executar Testes das Automações`, [Run 44893681950](https://github.com/ProjectNox-org/project-nox-requests/actions/runs/44893681950)): `success`.
+    - CodeQL (`Push on main`, [Run 44893681898](https://github.com/ProjectNox-org/project-nox-requests/actions/runs/44893681898)): `success`.
+    - Duplicate Guard (`push` em `main`, [Run 44893681880](https://github.com/ProjectNox-org/project-nox-requests/actions/runs/44893681880)): `success` — `"effective_mode": "backfill"`, `"dry_run": false`, `"auto_close_enabled": false`, `"rule_version": "1.7.2"`, `"evaluated_count": 15`, `"skipped_cached_count": 0` (invalidação automática do cache `v1.7.1`), `"would_or_did_close": 0`, `"error_count": 0`.
+  - **Validações operacionais em produção na `main` (`v1.7.2`):**
+    - `backfill` em `dry_run=true` ([Run 44893792373](https://github.com/ProjectNox-org/project-nox-requests/actions/runs/44893792373)): `success` — `"effective_mode": "backfill"`, `"dry_run": true`, `"auto_close_enabled": false`, `"rule_version": "1.7.2"`, `"evaluated_count": 15`, `"skipped_cached_count": 0`, `"would_or_did_close": 0`, `"error_count": 0`.
+    - `reconcile` protegido (`auto_close_enabled=false`, [Run 44893831898](https://github.com/ProjectNox-org/project-nox-requests/actions/runs/44893831898)): `success` — `"effective_mode": "reconcile"`, `"dry_run": false`, `"auto_close_enabled": false`, `"rule_version": "1.7.2"`, `"evaluated_count": 15`, `"skipped_cached_count": 15` (cache hit), `"would_or_did_close": 0`, `"error_count": 0`.
+    - **Reativação controlada:** variável `NOX_DUPLICATE_GUARD_AUTO_CLOSE` removida via `gh variable delete`, restaurando `auto_close_enabled: true`.
+    - `reconcile` real #1 pós-reativação ([Run 44893898436](https://github.com/ProjectNox-org/project-nox-requests/actions/runs/44893898436)): `success` — `"effective_mode": "reconcile"`, `"dry_run": false`, `"auto_close_enabled": true`, `"rule_version": "1.7.2"`, `"evaluated_count": 15`, `"skipped_cached_count": 0` (reavaliação pela mudança de `auto_close_enabled`), `"would_or_did_close": 0`, `"error_count": 0`.
+    - `reconcile` real #2 com cache hit ([Run 44893945366](https://github.com/ProjectNox-org/project-nox-requests/actions/runs/44893945366)): `success` — `"effective_mode": "reconcile"`, `"dry_run": false`, `"auto_close_enabled": true`, `"rule_version": "1.7.2"`, `"evaluated_count": 15`, `"skipped_cached_count": 15`, `"would_or_did_close": 0`, `"error_count": 0`.
+  - **Integridade final:** `0` alertas abertos no CodeQL e todas as **15 Issues reais abertas** (`#123`, `#125`, `#128`, `#132`, `#134`, `#138`, `#139`, `#140`, `#144`, `#145`, `#146`, `#148`, `#150`, `#151`, `#156`) preservadas abertas com suas labels originais.
