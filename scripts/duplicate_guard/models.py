@@ -11,7 +11,7 @@ from typing import Literal
 
 Classification = Literal["no_match", "possible_duplicate", "confirmed_duplicate"]
 
-RULE_ENGINE_VERSION = "1.7.1"
+RULE_ENGINE_VERSION = "1.7.2"
 
 INTENT_CREATE_EXTENSION = "create_extension"
 INTENT_BUG_FIX = "bug_fix"

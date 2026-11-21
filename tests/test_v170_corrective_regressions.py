@@ -708,3 +708,208 @@ def test_v171_adv_10_contradictory_observation_edited_during_closing_rolls_back_
     assert ("remove_label", 7222, LABEL_DUPLICATE) in api_close.writes
     assert not any(w[0] == "close_issue" for w in api_close.writes)
 
+
+# ---------------------------------------------------------------------------
+# v1.7.2 Double-Negation & Multi-Requirement Contextual Integration Suite (10 tests)
+# ---------------------------------------------------------------------------
+
+def test_v172_dn_01_bloquear_vs_nao_bloquear_login_preserved_open():
+    i1 = _ne(7301, "Sushi Manga", "https://sushimanga.com", notes="Preciso bloquear login na extensão.")
+    i2 = _ne(
+        7302,
+        "Sushi Manga",
+        "https://sushimanga.com",
+        notes="Preciso não bloquear login na extensão.",
+        created_at="2026-11-02T10:00:00Z",
+    )
+    dec, _, _ = _eval([i1, i2], 7302)
+    assert dec.classification == "possible_duplicate"
+    assert dec.should_auto_close is False
+    assert "scope_or_observation_divergence" in dec.candidates[0].contradictions
+
+
+def test_v172_dn_02_ocultar_vs_nao_ocultar_conteudo_adulto_preserved_open():
+    i1 = _ne(7303, "Sushi Manga", "https://sushimanga.com", notes="Quero ocultar conteúdo adulto.")
+    i2 = _ne(
+        7304,
+        "Sushi Manga",
+        "https://sushimanga.com",
+        notes="Quero não ocultar conteúdo adulto.",
+        created_at="2026-11-02T10:00:00Z",
+    )
+    dec, _, _ = _eval([i1, i2], 7304)
+    assert dec.classification == "possible_duplicate"
+    assert dec.should_auto_close is False
+
+
+def test_v172_dn_03_excluir_vs_nao_excluir_obras_em_ingles_preserved_open():
+    i1 = _ne(7305, "Sushi Manga", "https://sushimanga.com", notes="Preciso excluir obras em inglês.")
+    i2 = _ne(
+        7306,
+        "Sushi Manga",
+        "https://sushimanga.com",
+        notes="Preciso não excluir obras em inglês.",
+        created_at="2026-11-02T10:00:00Z",
+    )
+    dec, _, _ = _eval([i1, i2], 7306)
+    assert dec.classification == "possible_duplicate"
+    assert dec.should_auto_close is False
+
+
+def test_v172_dn_04_permitir_vs_nao_permitir_login_preserved_open():
+    i1 = _ne(7307, "Sushi Manga", "https://sushimanga.com", notes="Preciso permitir login na extensão.")
+    i2 = _ne(
+        7308,
+        "Sushi Manga",
+        "https://sushimanga.com",
+        notes="Preciso não permitir login na extensão.",
+        created_at="2026-11-02T10:00:00Z",
+    )
+    dec, _, _ = _eval([i1, i2], 7308)
+    assert dec.classification == "possible_duplicate"
+    assert dec.should_auto_close is False
+
+
+def test_v172_dn_05_exibir_vs_nao_exibir_conteudo_preserved_open():
+    i1 = _ne(7309, "Sushi Manga", "https://sushimanga.com", notes="Quero exibir conteúdo adulto.")
+    i2 = _ne(
+        7310,
+        "Sushi Manga",
+        "https://sushimanga.com",
+        notes="Quero não exibir conteúdo adulto.",
+        created_at="2026-11-02T10:00:00Z",
+    )
+    dec, _, _ = _eval([i1, i2], 7310)
+    assert dec.classification == "possible_duplicate"
+    assert dec.should_auto_close is False
+
+
+def test_v172_dn_06_incluir_vs_nao_incluir_recurso_preserved_open():
+    i1 = _ne(7311, "Sushi Manga", "https://sushimanga.com", notes="Preciso incluir filtro por autor.")
+    i2 = _ne(
+        7312,
+        "Sushi Manga",
+        "https://sushimanga.com",
+        notes="Preciso não incluir filtro por autor.",
+        created_at="2026-11-02T10:00:00Z",
+    )
+    dec, _, _ = _eval([i1, i2], 7312)
+    assert dec.classification == "possible_duplicate"
+    assert dec.should_auto_close is False
+
+
+def test_v172_dn_07_semantically_equivalent_double_negation_and_affirmative_formulations_auto_close():
+    # "não permitir login" ≡ "bloquear login"
+    a1 = _ne(7313, "Sushi Manga", "https://sushimanga.com", notes="Preciso não permitir login na extensão.")
+    a2 = _ne(
+        7314,
+        "Sushi Manga",
+        "https://sushimanga.com",
+        notes="Quero bloquear login na extensão.",
+        created_at="2026-11-02T10:00:00Z",
+    )
+    dec_a, _, _ = _eval([a1, a2], 7314)
+    assert dec_a.classification == "confirmed_duplicate"
+    assert dec_a.should_auto_close is True
+
+    # "não ocultar conteúdo adulto" ≡ "exibir conteúdo adulto"
+    b1 = _ne(7315, "Nori Manga", "https://norimanga.com", notes="Quero não ocultar conteúdo adulto.")
+    b2 = _ne(
+        7316,
+        "Nori Manga",
+        "https://norimanga.com",
+        notes="Preciso exibir conteúdo adulto.",
+        created_at="2026-11-02T10:00:00Z",
+    )
+    dec_b, _, _ = _eval([b1, b2], 7316)
+    assert dec_b.classification == "confirmed_duplicate"
+    assert dec_b.should_auto_close is True
+
+
+def test_v172_dn_08_true_duplicates_without_observations_auto_close():
+    i1 = _ne(7317, "Wasabi Manga", "https://wasabimanga.com", notes="_No response_")
+    i2 = _ne(
+        7318,
+        "WasabiManga",
+        "https://www.wasabimanga.com/",
+        notes="_No response_",
+        created_at="2026-11-02T10:00:00Z",
+    )
+    dec, _, _ = _eval([i1, i2], 7318)
+    assert dec.classification == "confirmed_duplicate"
+    assert dec.should_auto_close is True
+
+
+def test_v172_dn_09_multiple_requirements_with_negation_on_only_one_preserved_open():
+    # Clause boundary prevents negation on the second requirement from inverting or masking divergence
+    m1 = _ne(
+        7319,
+        "Sushi Manga",
+        "https://sushimanga.com",
+        notes="Quero filtro por autor e não ocultar capítulos extras.",
+    )
+    m2 = _ne(
+        7320,
+        "Sushi Manga",
+        "https://sushimanga.com",
+        notes="Quero filtro por autor e ocultar capítulos extras.",
+        created_at="2026-11-02T10:00:00Z",
+    )
+    dec_m, _, _ = _eval([m1, m2], 7320)
+    assert dec_m.classification == "possible_duplicate"
+    assert dec_m.should_auto_close is False
+
+    # Negation scoped only to first verb must not flip second clause
+    s1 = _ne(
+        7321,
+        "Nori Manga",
+        "https://norimanga.com",
+        notes="Preciso não bloquear login e ocultar comentários.",
+    )
+    s2 = _ne(
+        7322,
+        "Nori Manga",
+        "https://norimanga.com",
+        notes="Preciso bloquear login e não ocultar comentários.",
+        created_at="2026-11-02T10:00:00Z",
+    )
+    dec_s, _, _ = _eval([s1, s2], 7322)
+    assert dec_s.classification == "possible_duplicate"
+    assert dec_s.should_auto_close is False
+
+
+def test_v172_dn_10_concurrent_edit_affirmative_to_negative_blocks_close_and_rolls_back_labels():
+    obs_pos = "Quero ocultar conteúdo adulto."
+    obs_dbl_neg = "Quero não ocultar conteúdo adulto."
+    i1 = _ne(7323, "Sushi Manga", "https://sushimanga.com", notes=obs_pos)
+    i2 = _ne(
+        7324,
+        "Sushi Manga",
+        "https://sushimanga.com",
+        notes=obs_pos,
+        created_at="2026-11-02T10:00:00Z",
+    )
+    parsed = parse_corpus([i1, i2])
+    matcher = DuplicateMatcher(parsed, _cfg())
+    dec = matcher.evaluate(parsed[1])
+    assert dec.classification == "confirmed_duplicate"
+    assert dec.should_auto_close is True
+
+    # Mutate live issue between Duplicado label and close_issue() -> aborts and rolls back Duplicado label
+    class MutateRightBeforeCloseApi(InMemoryGitHubApi):
+        def add_labels(self, issue_number: int, labels: list[str]) -> None:
+            super().add_labels(issue_number, labels)
+            if issue_number == 7324 and LABEL_DUPLICATE in labels:
+                self.issues[7324]["body"] = _ne(
+                    7324, "Sushi Manga", "https://sushimanga.com", notes=obs_dbl_neg, created_at="2026-11-02T10:00:00Z"
+                ).body
+
+    api = MutateRightBeforeCloseApi([i1, i2])
+    res = GuardActionExecutor(api, _cfg(), {7323: i1, 7324: i2}, matcher=matcher).apply(dec)
+    assert res.closed is False
+    assert res.action_taken == "aborted_concurrent_edit_before_close"
+    assert api.issues[7324]["state"] == "open"
+    assert LABEL_DUPLICATE not in {l["name"] for l in api.issues[7324]["labels"]}
+    assert ("remove_label", 7324, LABEL_DUPLICATE) in api.writes
+    assert not any(w[0] == "close_issue" for w in api.writes)
+
