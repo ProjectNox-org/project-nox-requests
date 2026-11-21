@@ -15,8 +15,11 @@ O **Nox Duplicate Guard** é o sistema híbrido do Project Nox para prevenir a a
 | :--- | :--- | :--- | :--- |
 | **Camada A — Prevenção** | Tracker (`project-nox-tracker`) | Tempo real no navegador | Pesquisa rápida no modal **Abrir Solicitação** (`duplicate-guard.js`) antes de abrir o formulário do GitHub, incentivando voto 👍 em tickets existentes. |
 | **Nível 1 — Evento Imediato** | `issues: [opened, edited, reopened]` | ~5–15s após o evento | Analisa apenas a Issue do evento (`--mode single`) contra todo o histórico paginado (abertas e fechadas). |
-| **Nível 2 — Reconciliação Incremental** | `schedule: "12,42 * * * *"` (30 min) | A cada 30 min | Recupera eventos perdidos/editações e reavalia Issues alteradas nos últimos 30 dias usando cache incremental (`.cache/nox-duplicate-guard/state.json`). Se nunca houve backfill ou se `RULE_ENGINE_VERSION` mudou, promove automaticamente para `backfill`. |
-| **Nível 3 — Auditoria & Backfill Histórico** | `schedule: "17 4 * * *"` (diário) + `workflow_dispatch` (`mode: backfill`) | Diário às 04:17 UTC + sob demanda | Varre **todas as Issues abertas independentemente da data** em ordem cronológica ascendente (`oldest → newest`), processando em lotes (`batch_size: 50`) e pulando tickets inalterados já validados no cache. |
+| **Nível 2 — Reconciliação Incremental** | `schedule: "12,42 * * * *"` (30 min) | A cada 30 min | Recupera eventos perdidos/editações e avalia Issues alteradas nos últimos 30 dias ou ainda sem entrada válida no cache (`.cache/nox-duplicate-guard/state.json`), podando registros antigos de Issues fechadas. Se nunca houve backfill ou se `RULE_ENGINE_VERSION` mudou, promove automaticamente para `backfill`. |
+| **Nível 3 — Auditoria & Backfill Histórico** | `push` em `main` + `schedule: "17 4 * * *"` + `workflow_dispatch` (`mode: backfill`) | No merge para `main`, diário às 04:17 UTC e sob demanda | Varre **todas as Issues abertas independentemente da data** em ordem cronológica ascendente (`oldest → newest`), colapsando cadeias no mesmo lote, processando em lotes (`batch_size: 50`) e pulando tickets inalterados já validados no cache. |
+
+> [!NOTE]
+> **Disponibilidade no GitHub Actions:** workflows por eventos (`issues`) e agendamentos (`schedule`) rodam sem servidor dedicado. Entretanto, em repositórios públicos do GitHub, workflows agendados (`cron`) são automaticamente suspensos se o repositório permanecer **60 dias consecutivos sem commits**. Além disso, qualquer falha operacional ou parcial no lote retorna código de saída `2` com alerta no *Job Summary* para notificação automática aos mantenedores.
 
 ### Por que 30 minutos + Cache Incremental em vez de Cron de 5 minutos?
 

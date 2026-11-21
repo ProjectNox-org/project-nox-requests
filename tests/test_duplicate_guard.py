@@ -1024,6 +1024,106 @@ def test_30_historical_backfill_incremental_cache_and_precedence(tmp_path, monke
     assert api.api_calls_made == 1  # Only the paginated list_issues call!
 
 
+def test_31_in_batch_chain_collapse_cache_pruning_and_non_silent_failure(tmp_path, capsys):
+    # 1. In-batch chain collapse: #10 <- #11 <- #12 all open at start; #12 must point directly to #10, not #11
+    i10 = make_raw(
+        10, "[Nova extensão]: ChainBatch",
+        "### Tipo de extensão\nMangá\n### Nome da fonte\nChainBatch\n### URL do site\nhttps://chainbatch.com\n",
+        labels=["Nova extensão", "Mangá", "Em análise"],
+        created_at="2026-05-01T10:00:00Z",
+    )
+    i11 = make_raw(
+        11, "[Nova extensão]: Chain Batch",
+        "### Tipo de extensão\nMangá\n### Nome da fonte\nChain Batch\n### URL do site\nhttps://www.chainbatch.com/\n",
+        labels=["Nova extensão", "Mangá", "Em análise"],
+        created_at="2026-05-02T10:00:00Z",
+    )
+    i12 = make_raw(
+        12, "[Nova extensão]: Chain Batch!",
+        "### Tipo de extensão\nMangá\n### Nome da fonte\nChain Batch!\n### URL do site\nhttps://chainbatch.com/home\n",
+        labels=["Nova extensão", "Mangá", "Em análise"],
+        created_at="2026-05-03T10:00:00Z",
+    )
+
+    # Also test reconcile catches an old (>90d) open issue missing from cache (#5)
+    old_untracked = make_raw(
+        5, "[Nova extensão]: UntrackedOld",
+        "### Tipo de extensão\nAnime\n### Nome da fonte\nUntrackedOld\n### URL do site\nhttps://untrackedold.tv\n",
+        labels=["Nova extensão", "Anime", "Em análise"],
+        created_at="2026-04-01T10:00:00Z",
+    )
+
+    api = InMemoryGitHubApi([old_untracked, i10, i11, i12])
+    cache_file = tmp_path / "prune_cache.json"
+    # Pre-seed cache with stale closed issue #999 and a previous backfill timestamp
+    cache_file.write_text(
+        json.dumps({
+            "rule_version": "1.1.0",
+            "last_full_backfill_at": "2026-10-01T00:00:00+00:00",
+            "evaluated": {
+                "999": {
+                    "updated_at": "2026-09-01T00:00:00Z",
+                    "fingerprint": "stale",
+                    "auto_close_enabled": True,
+                    "decision": "no_match",
+                    "canonical_issue": None,
+                    "canonical_state": None,
+                    "action_taken": "noop",
+                }
+            },
+            "dup_links": {"888": {"updated_at": "2026-09-01T00:00:00Z", "canonical": 1}},
+        }),
+        encoding="utf-8",
+    )
+
+    rc = run_cli(
+        ["--mode", "reconcile", "--lookback-days", "30", "--cache-file", str(cache_file)],
+        client_override=api,
+    )
+    assert rc == 0
+    out = json.loads(capsys.readouterr().out)
+    rows = {r["issue_number"]: r for r in out["results"]}
+    assert 5 in rows  # Old untracked issue was NOT forgotten by reconcile
+    assert rows[11]["canonical_issue"] == 10 and rows[11]["action_taken"] == "auto_closed"
+    assert rows[12]["canonical_issue"] == 10 and rows[12]["action_taken"] == "auto_closed"
+
+    # Cache pruned closed #11, closed stale #999, and nonexistent dup_link #888
+    persisted = json.loads(cache_file.read_text(encoding="utf-8"))
+    assert "999" not in persisted["evaluated"]
+    assert "11" not in persisted["evaluated"]
+    assert "888" not in persisted["dup_links"]
+    assert "5" in persisted["evaluated"] and "10" in persisted["evaluated"]
+
+    # 2. Non-silent partial failure returns exit code 2 while preserving valid checkpoints
+    i20 = make_raw(
+        20, "[Nova extensão]: FailBatchOrig",
+        "### Tipo de extensão\nMangá\n### Nome da fonte\nFailBatchOrig\n### URL do site\nhttps://failbatch.com\n",
+        labels=["Nova extensão", "Mangá"],
+        created_at="2026-11-01T10:00:00Z",
+    )
+    i21 = make_raw(
+        21, "[Nova extensão]: FailBatchOrig",
+        "### Tipo de extensão\nMangá\n### Nome da fonte\nFailBatchOrig\n### URL do site\nhttps://failbatch.com\n",
+        labels=["Nova extensão", "Mangá"],
+        created_at="2026-11-02T10:00:00Z",
+    )
+    api_fail = InMemoryGitHubApi([i20, i21])
+    api_fail.fail_on["create_comment"] = PermissionDeniedError("blocked", status=403)
+    fail_cache = tmp_path / "fail_cache.json"
+    rc_fail = run_cli(
+        ["--mode", "backfill", "--cache-file", str(fail_cache)],
+        client_override=api_fail,
+    )
+    assert rc_fail == 2
+    out_fail = json.loads(capsys.readouterr().out)
+    assert out_fail["status"] == "partial_error"
+    assert out_fail["error_count"] == 1
+    persisted_fail = json.loads(fail_cache.read_text(encoding="utf-8"))
+    # #20 succeeded and was cached; failed #21 was NOT falsely cached as completed
+    assert "20" in persisted_fail["evaluated"]
+    assert "21" not in persisted_fail["evaluated"]
+
+
 def test_workflow_security_no_untrusted_interpolation():
     wf_path = REPO_ROOT / ".github" / "workflows" / "duplicate-guard.yml"
     wf_text = wf_path.read_text(encoding="utf-8")

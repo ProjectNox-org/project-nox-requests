@@ -3,6 +3,12 @@ name: Nox Duplicate Guard
 on:
   issues:
     types: [opened, edited, reopened]
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/duplicate-guard.yml"
+      - ".github/duplicate-guard.json"
+      - "scripts/duplicate_guard/**"
   schedule:
     - cron: "12,42 * * * *"
     - cron: "17 4 * * *"
@@ -51,7 +57,7 @@ permissions:
   issues: write
 
 concurrency:
-  group: nox-duplicate-guard-${{ github.event.issue.number || github.event_name }}
+  group: nox-duplicate-guard-${{ github.event.issue.number || 'batch' }}
   cancel-in-progress: false
 
 jobs:
@@ -71,10 +77,11 @@ jobs:
           python-version: "3.12"
 
       - name: Restaurar cache incremental do Duplicate Guard
+        if: github.event_name != 'issues'
         uses: actions/cache@v4
         with:
           path: .cache/nox-duplicate-guard
-          key: nox-duplicate-guard-${{ github.repository_id }}-v1-${{ github.run_id }}
+          key: nox-duplicate-guard-${{ github.repository_id }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
             nox-duplicate-guard-${{ github.repository_id }}-v1-
 
@@ -124,6 +131,8 @@ jobs:
           elif event_name == "schedule":
               mode = "backfill" if schedule_expr == "17 4 * * *" else "reconcile"
               cmd.extend(["--mode", mode])
+          elif event_name == "push":
+              cmd.extend(["--mode", "backfill"])
           else:
               cmd.extend(["--mode", "single"])
 

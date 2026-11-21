@@ -17,7 +17,7 @@ from .actions import GuardActionExecutor
 from .config import DEFAULT_CONFIG_PATH, load_config
 from .github_client import GitHubApiError, GitHubClient, PermissionDeniedError, RateLimitError
 from .matcher import DuplicateMatcher, extract_canonical_reference
-from .models import RULE_ENGINE_VERSION, GuardConfig, ParsedIssue, RawIssue
+from .models import LABEL_DUPLICATE, RULE_ENGINE_VERSION, GuardConfig, ParsedIssue, RawIssue
 from .parser import parse_issue
 
 TERMINAL_CACHE_ACTIONS = frozenset({
@@ -161,6 +161,32 @@ def _save_cache(cache_path: Path, state: dict) -> None:
     tmp_path.replace(cache_path)
 
 
+def _prune_cache(state: dict, open_numbers: set[int], all_numbers: set[int]) -> None:
+    evaluated = state.get("evaluated")
+    if isinstance(evaluated, dict):
+        state["evaluated"] = {
+            k: v for k, v in evaluated.items()
+            if str(k).isdigit() and int(k) in open_numbers
+        }
+    dup_links = state.get("dup_links")
+    if isinstance(dup_links, dict):
+        state["dup_links"] = {
+            k: v for k, v in dup_links.items()
+            if str(k).isdigit() and int(k) in all_numbers
+        }
+
+
+def _has_valid_cache_entry(entry: dict | None, target: ParsedIssue, config: GuardConfig) -> bool:
+    if not isinstance(entry, dict):
+        return False
+    return (
+        entry.get("updated_at") == target.raw.updated_at
+        and entry.get("fingerprint") == target.content_fingerprint
+        and entry.get("auto_close_enabled") == config.auto_close_enabled
+        and entry.get("action_taken") in TERMINAL_CACHE_ACTIONS
+    )
+
+
 def _is_cache_hit(
     entry: dict | None,
     target: ParsedIssue,
@@ -210,12 +236,21 @@ def _write_summary(summary_path: str | None, meta: dict, results: list[dict]) ->
             f"- **Duplicatas comprovadas:** `{meta['confirmed_duplicates_count']}` | "
             f"**Possíveis duplicatas:** `{meta['possible_duplicates_count']}` | "
             f"**Fechadas / Simuladas:** `{meta['would_or_did_close']}` | "
+            f"**Erros parciais:** `{meta['error_count']}` | "
             f"**Chamadas API:** `{meta['api_calls_made']}`"
         ),
         "",
+    ]
+    if meta.get("error_count", 0) > 0:
+        lines.extend([
+            "> [!WARNING]",
+            f"> **Alerta de Falha Parcial / API:** `{meta['error_count']}` Issue(s) tiveram erro durante o processamento. Consulte o JSON nos logs para detalhes.",
+            "",
+        ])
+    lines.extend([
         "| Issue | Categoria | Classificação | Original | Ação | Dry-Run |",
         "| :--- | :--- | :--- | :--- | :--- | :--- |",
-    ]
+    ])
     for row in results:
         canon = f"#{row['canonical_issue']}" if row["canonical_issue"] else "—"
         lines.append(
@@ -305,7 +340,14 @@ def run_cli(argv: list[str] | None = None, *, client_override: object | None = N
         lookback = args.lookback_days if args.lookback_days is not None else config.reconcile_lookback_days
         cutoff = datetime.now(tz=timezone.utc) - timedelta(days=max(1, lookback))
         for p in sorted(parsed_list, key=lambda x: (_parse_iso(x.raw.created_at), x.raw.number)):
-            if p.is_open and (_parse_iso(p.raw.created_at) >= cutoff or _parse_iso(p.raw.updated_at) >= cutoff):
+            if not p.is_open:
+                continue
+            cached_entry = cache_state["evaluated"].get(str(p.raw.number))
+            if (
+                _parse_iso(p.raw.created_at) >= cutoff
+                or _parse_iso(p.raw.updated_at) >= cutoff
+                or not _has_valid_cache_entry(cached_entry, p, config)
+            ):
                 target_numbers.append(p.raw.number)
 
     report_rows: list[dict] = []
@@ -366,6 +408,30 @@ def run_cli(argv: list[str] | None = None, *, client_override: object | None = N
             skipped_reason = decision.blocked_reason
             partial_errors = []
 
+        if (closed_flag or action_taken == "dry_run_auto_closed") and decision.canonical_issue is not None:
+            matcher.duplicate_links[num] = decision.canonical_issue
+            old_raw = issues_by_num[num]
+            new_labels = tuple(l for l in old_raw.labels if l not in ("Em análise", "Aguardando informações"))
+            if LABEL_DUPLICATE not in new_labels:
+                new_labels = (*new_labels, LABEL_DUPLICATE)
+            new_raw = replace(old_raw, state="closed", state_reason="duplicate", labels=new_labels)
+            issues_by_num[num] = new_raw
+            new_parsed = replace(
+                target_parsed,
+                raw=new_raw,
+                is_open=False,
+                is_closed=True,
+                is_duplicate_marked=True,
+                resolution="duplicate",
+            )
+            parsed_by_num[num] = new_parsed
+            matcher.by_number[num] = new_parsed
+            cat_list = matcher.by_category.get(new_parsed.category, [])
+            for idx, item in enumerate(cat_list):
+                if item.raw.number == num:
+                    cat_list[idx] = new_parsed
+                    break
+
         if can_persist_cache and action_taken in TERMINAL_CACHE_ACTIONS:
             canon_state = issues_by_num[decision.canonical_issue].state if decision.canonical_issue in issues_by_num else None
             cache_state["evaluated"][str(num)] = {
@@ -398,8 +464,11 @@ def run_cli(argv: list[str] | None = None, *, client_override: object | None = N
             rate_limited_stop = True
             break
 
-    if can_persist_cache and effective_mode == "backfill" and not batch_truncated and not rate_limited_stop:
-        cache_state["last_full_backfill_at"] = datetime.now(tz=timezone.utc).isoformat()
+    open_numbers = {num for num, raw_obj in issues_by_num.items() if raw_obj.state == "open"}
+    if can_persist_cache:
+        _prune_cache(cache_state, open_numbers, set(issues_by_num.keys()))
+        if effective_mode == "backfill" and not batch_truncated and not rate_limited_stop:
+            cache_state["last_full_backfill_at"] = datetime.now(tz=timezone.utc).isoformat()
         _save_cache(cache_path, cache_state)
 
     total_open_issues = sum(1 for p in parsed_list if p.is_open)
@@ -413,10 +482,23 @@ def run_cli(argv: list[str] | None = None, *, client_override: object | None = N
         1 for r in report_rows
         if r["classification"] == "possible_duplicate"
     )
+    error_actions = {
+        "api_error_skipped",
+        "aborted_canonical_check_failed",
+        "aborted_comment_failed",
+        "partial_failure_before_close",
+        "partial_auto_close_error",
+        "comment_failed",
+    }
+    error_count = sum(
+        1 for r in report_rows
+        if (r["partial_errors"] or r["action_taken"] in error_actions)
+        and not (r.get("skipped_reason") and "rate limit" in str(r["skipped_reason"]).lower())
+    )
     api_calls = getattr(client, "api_calls_made", 0) if client is not None else 0
 
     meta = {
-        "status": "ok",
+        "status": "partial_error" if error_count > 0 else "ok",
         "mode": args.mode,
         "effective_mode": effective_mode,
         "repo": args.repo,
@@ -431,6 +513,7 @@ def run_cli(argv: list[str] | None = None, *, client_override: object | None = N
         "possible_duplicates_count": possible_count,
         "would_or_did_close": would_or_did_close,
         "kept_open_ambiguous": kept_open_ambiguous,
+        "error_count": error_count,
         "batch_truncated": batch_truncated,
         "rate_limited_stop": rate_limited_stop,
         "api_calls_made": api_calls,
@@ -438,7 +521,7 @@ def run_cli(argv: list[str] | None = None, *, client_override: object | None = N
 
     _write_summary(args.summary_file, meta, report_rows)
     print(json.dumps({**meta, "results": report_rows}, ensure_ascii=False, indent=2))
-    return 0
+    return 2 if error_count > 0 else 0
 
 
 if __name__ == "__main__":
