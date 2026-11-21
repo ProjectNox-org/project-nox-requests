@@ -1,0 +1,1417 @@
+{
+  "repository": "ProjectNox-org/project-nox-requests",
+  "issues": [
+    {
+      "number": 1,
+      "title": "[Bug]: Rede Canais",
+      "body": "### Tipo\n\nAnime\n\n### Nome da extensão\n\nRede Canais\n\n### Versão\n\n14.4\n\n### URL do site\n\nhttps//:redecanais.af/browse\n\n### O que está quebrado?\n\n- [ ] Popular\n- [ ] Recentes\n- [ ] Busca\n- [ ] Filtros\n- [ ] Detalhes\n- [ ] Capítulos/Episódios\n- [x] Leitor/Vídeo\n- [ ] Login\n- [ ] Outro\n\n### Quando começou, se souber\n\nHoje\n\n### O site funciona normalmente no navegador?\n\nSim\n\n### Precisa de login?\n\nNão\n\n### Precisa de VIP/Premium?\n\nNão\n\n### Mensagem de erro\n\nNão abre nenhum episódio..\n\n### Informações adicionais\n\n_No response_",
+      "state": "closed",
+      "state_reason": "completed",
+      "created_at": "2026-09-04T14:15:22Z",
+      "updated_at": "2026-09-04T15:15:38Z",
+      "closed_at": "2026-09-04T14:35:50Z",
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/1",
+      "comments": 1,
+      "labels": [
+        {
+          "name": "Problema na extensão"
+        },
+        {
+          "name": "Anime"
+        },
+        {
+          "name": "Concluído"
+        }
+      ],
+      "user": {
+        "login": "Awerkori"
+      }
+    },
+    {
+      "number": 3,
+      "title": "[Nova extensão]: Animex HD",
+      "body": "### Tipo\n\nAnime\n\n### Nome da fonte/site\n\nAnimex HD\n\n### URL do site\n\nanimexhd.xyz\n\n### Idioma\n\nPortuguês (Brasil)\n\n### Precisa de login?\n\nNão\n\n### Precisa de VIP/Premium?\n\nNão\n\n### Conteúdo +18?\n\nNão\n\n### Observações\n\nNada a comentar. \n\n### Confirmações\n\n- [x] Confirmei que a extensão ainda não existe.\n- [x] Procurei Issues abertas e fechadas.\n- [x] Este ticket não é duplicado.\n- [x] Não incluí senha, token, cookie ou credencial privada.",
+      "state": "closed",
+      "state_reason": "completed",
+      "created_at": "2026-09-04T20:57:18Z",
+      "updated_at": "2026-09-10T09:36:40Z",
+      "closed_at": "2026-09-10T09:36:40Z",
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/3",
+      "comments": 0,
+      "labels": [
+        {
+          "name": "Anime"
+        },
+        {
+          "name": "Nova extensão"
+        },
+        {
+          "name": "Concluído"
+        }
+      ],
+      "user": {
+        "login": "Jhoorodre"
+      }
+    },
+    {
+      "number": 6,
+      "title": "[Nova extensão]: Aniture-PT",
+      "body": "### Tipo\n\nAnime\n\n### Nome da fonte/site\n\nAniture-PT\n\n### URL do site\n\naniture-pt.com.br\n\n### Idioma\n\nPortuguês (Brasil)\n\n### Precisa de login?\n\nNão\n\n### Precisa de VIP/Premium?\n\nNão\n\n### Conteúdo +18?\n\nNão\n\n### Observações\n\nNada a comentar\n\n\n### Confirmações\n\n- [x] Confirmei que a extensão ainda não existe.\n- [x] Procurei Issues abertas e fechadas.\n- [x] Este ticket não é duplicado.\n- [x] Não incluí senha, token, cookie ou credencial privada.",
+      "state": "closed",
+      "state_reason": "completed",
+      "created_at": "2026-09-04T21:24:02Z",
+      "updated_at": "2026-09-10T09:36:56Z",
+      "closed_at": "2026-09-10T09:36:56Z",
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/6",
+      "comments": 0,
+      "labels": [
+        {
+          "name": "Anime"
+        },
+        {
+          "name": "Nova extensão"
+        },
+        {
+          "name": "Concluído"
+        }
+      ],
+      "user": {
+        "login": "Jhoorodre"
+      }
+    },
+    {
+      "number": 7,
+      "title": "[Nova extensão]: Animes HD",
+      "body": "### Tipo\n\nAnime\n\n### Nome da fonte/site\n\nAnimes HD\n\n### URL do site\n\nanimeshd.to\n\n### Idioma\n\nPortuguês (Brasil)\n\n### Precisa de login?\n\nNão\n\n### Precisa de VIP/Premium?\n\nNão\n\n### Conteúdo +18?\n\nNão\n\n### Observações\n\nNada a comentar\n\n\n### Confirmações\n\n- [x] Confirmei que a extensão ainda não existe.\n- [x] Procurei Issues abertas e fechadas.\n- [x] Este ticket não é duplicado.\n- [x] Não incluí senha, token, cookie ou credencial privada.",
+      "state": "closed",
+      "state_reason": "completed",
+      "created_at": "2026-09-04T21:25:08Z",
+      "updated_at": "2026-09-10T09:37:17Z",
+      "closed_at": "2026-09-10T09:37:17Z",
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/7",
+      "comments": 0,
+      "labels": [
+        {
+          "name": "Anime"
+        },
+        {
+          "name": "Nova extensão"
+        },
+        {
+          "name": "Concluído"
+        }
+      ],
+      "user": {
+        "login": "Jhoorodre"
+      }
+    },
+    {
+      "number": 8,
+      "title": "[Nova extensão]: Ink",
+      "body": "### Tipo\n\nMangá\n\n### Nome da fonte/site\n\nInk\n\n### URL do site\n\nhttps://ink.dot.app.br\n\n### Idioma\n\nPortuguês (Brasil)\n\n### Precisa de login?\n\nSim\n\n### Precisa de VIP/Premium?\n\nSim\n\n### Conteúdo +18?\n\nNão\n\n### Observações\n\nTinha pedido no Discord posso fornecer usuário e senha para criação\n\n### Confirmações\n\n- [x] Confirmei que a extensão ainda não existe.\n- [x] Procurei Issues abertas e fechadas.\n- [x] Este ticket não é duplicado.\n- [x] Não incluí senha, token, cookie ou credencial privada.",
+      "state": "closed",
+      "state_reason": "completed",
+      "created_at": "2026-09-06T03:43:06Z",
+      "updated_at": "2026-09-06T22:38:04Z",
+      "closed_at": "2026-09-06T22:38:04Z",
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/8",
+      "comments": 1,
+      "labels": [
+        {
+          "name": "Mangá"
+        },
+        {
+          "name": "Nova extensão"
+        }
+      ],
+      "user": {
+        "login": "golimar001"
+      }
+    },
+    {
+      "number": 9,
+      "title": "[Bug]: erro ao carregar as páginas e a sinopse",
+      "body": "### Tipo\n\nMangá\n\n### Nome da extensão\n\nXxx yaoi \n\n### Versão\n\n1.4.56\n\n### URL do site\n\nhttps://3xyaoi.com/\n\n### O que está quebrado?\n\n- [ ] Popular\n- [ ] Recentes\n- [ ] Busca\n- [ ] Filtros\n- [x] Detalhes\n- [x] Capítulos/Episódios\n- [x] Leitor/Vídeo\n- [ ] Login\n- [ ] Outro\n\n### Quando começou, se souber\n\nHoje\n\n### O site funciona normalmente no navegador?\n\nSim\n\n### Precisa de login?\n\nNão\n\n### Precisa de VIP/Premium?\n\nNão\n\n### Mensagem de erro\n\n<img width=\"1080\" height=\"2408\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/52d988fe-c7be-4686-8001-28414df67fa9\" />\n\n### Informações adicionais\n\n<img width=\"1080\" height=\"2408\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/626350b4-ee02-4d65-8b0d-8fac449e59d2\" />",
+      "state": "closed",
+      "state_reason": "completed",
+      "created_at": "2026-09-07T07:23:46Z",
+      "updated_at": "2026-09-14T14:09:18Z",
+      "closed_at": "2026-09-13T21:06:55Z",
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/9",
+      "comments": 5,
+      "labels": [
+        {
+          "name": "Problema na extensão"
+        },
+        {
+          "name": "Mangá"
+        }
+      ],
+      "user": {
+        "login": "Lobinho450o"
+      }
+    },
+    {
+      "number": 13,
+      "title": "[Mudança de domínio]:",
+      "body": "### Tipo\n\nAnime\n\n### Nome da extensão\n\nAnimefire\n\n### URL antiga\n\nanimefire.net\n\n### URL nova\n\nhttps://animefire.io/\n\n### Observações\n\n© 2026 AnimeFire - Política de privacidade - DMCA\nEste site não hospeda nenhum vídeo em seu servidor. Todo conteúdo é provido de terceiros não afiliados.",
+      "state": "closed",
+      "state_reason": "completed",
+      "created_at": "2026-09-07T15:28:26Z",
+      "updated_at": "2026-09-10T09:37:44Z",
+      "closed_at": "2026-09-10T09:37:44Z",
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/13",
+      "comments": 0,
+      "labels": [
+        {
+          "name": "Anime"
+        },
+        {
+          "name": "Mudança de domínio"
+        },
+        {
+          "name": "Concluído"
+        }
+      ],
+      "user": {
+        "login": "RaiKay01"
+      }
+    },
+    {
+      "number": 25,
+      "title": "[Bug]: Erro de Nenhuma página encontrada XXX YAOI",
+      "body": "### Tipo\n\nMangá\n\n### Nome da extensão\n\nXXX YAOI \n\n### Versão\n\n1.4.56\n\n### URL do site\n\nhttps://3xyaoi.com/\n\n### O que está quebrado?\n\n- [ ] Popular\n- [ ] Recentes\n- [ ] Busca\n- [ ] Filtros\n- [ ] Detalhes\n- [x] Capítulos/Episódios\n- [x] Leitor/Vídeo\n- [ ] Login\n- [ ] Outro\n\n### Quando começou, se souber\n\nHoje, não sei se ocorreu alterações no site, ou qual a data correta do ocorrido, acessei hoje para ler.\n\n### O site funciona normalmente no navegador?\n\nSim\n\n### Precisa de login?\n\nNão\n\n### Precisa de VIP/Premium?\n\nNão\n\n### Mensagem de erro\n\nNenhuma página encontrada\n\n\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/b424008e-b6e2-4ee6-893d-76958e028d47\" />\n \n\n### Informações adicionais\n\nOs capítulos estão abrindo normalmente no website apenas dentro do mihon, que não está abrindo.\n\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/61a46a7f-3bc4-451e-99ce-31544f0aeece\" />\n\n",
+      "state": "closed",
+      "state_reason": "completed",
+      "created_at": "2026-09-11T23:57:16Z",
+      "updated_at": "2026-09-13T21:07:10Z",
+      "closed_at": "2026-09-13T21:07:10Z",
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/25",
+      "comments": 1,
+      "labels": [
+        {
+          "name": "Problema na extensão"
+        },
+        {
+          "name": "Mangá"
+        },
+        {
+          "name": "Concluído"
+        }
+      ],
+      "user": {
+        "login": "luanarbritto-commits"
+      }
+    },
+    {
+      "number": 29,
+      "title": "Gostaria que adicionassem essa nova extensão que surgiu no português brasileiro",
+      "body": "### Tipo\n\nMangá\n\n### Nome da fonte/site\n\nSakura\n\n### URL do site\n\nhttps://sakuramangas.org/\n\n### Idioma\n\nPortuguês Brasil - PT-BR\n\n### Precisa de login?\n\nNão\n\n### Precisa de VIP/Premium?\n\nNão\n\n### Conteúdo +18?\n\nSim\n\n### Observações\n\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/0ffcc91e-f216-4f74-acc0-849b2cb25ec9\" />\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/cd009198-305a-459b-ba16-8a93b3bb86d3\" />\n\n### Confirmações\n\n- [x] Confirmei que a extensão ainda não existe.\n- [x] Procurei Issues abertas e fechadas.\n- [x] Este ticket não é duplicado.\n- [x] Não incluí senha, token, cookie ou credencial privada.",
+      "state": "closed",
+      "state_reason": "completed",
+      "created_at": "2026-09-13T03:29:25Z",
+      "updated_at": "2026-09-13T03:48:25Z",
+      "closed_at": "2026-09-13T03:48:14Z",
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/29",
+      "comments": 1,
+      "labels": [
+        {
+          "name": "Mangá"
+        },
+        {
+          "name": "Nova extensão"
+        },
+        {
+          "name": "Recusado"
+        }
+      ],
+      "user": {
+        "login": "cleitonrod12-lab"
+      }
+    },
+    {
+      "number": 30,
+      "title": "[Bug]: Erro NullPointerException na Scan XXX YAOI",
+      "body": "### Tipo\n\nMangá\n\n### Nome da extensão\n\nXXX YAOI \n\n### Versão\n\n1.4.59\n\n### URL do site\n\nhttps://3xyaoi.com/\n\n### O que está quebrado?\n\n- [ ] Popular\n- [ ] Recentes\n- [ ] Busca\n- [ ] Filtros\n- [x] Detalhes\n- [x] Capítulos/Episódios\n- [x] Leitor/Vídeo\n- [ ] Login\n- [x] Outro\n\n### Quando começou, se souber\n\nVerifiquei após receber a notificação no meu e-mail que o problema de não encontrar páginas dos capítulos tinha sido resolvido, no caso fechado como completo.\n\n### O site funciona normalmente no navegador?\n\nSim\n\n### Precisa de login?\n\nNão\n\n### Precisa de VIP/Premium?\n\nNão\n\n### Mensagem de erro\n\nNão está mais mostrando os capítulos para acessar na leitura e nos que eu já tenho salvo na minha biblioteca continua aparecendo nenhuma imagem encontrada e dentro do website permanece estável. Está mostrando um erro que não consigo identificar apenas como NullPointerExcepetion e algo sobre Java.\n\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/efacdb06-b6d7-4dd9-8335-6eace8195739\" />\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/d49dd3aa-8792-40ba-b592-4c140e116df4\" />\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/a251ada2-b64b-4cab-80bb-5c4c1def2a1b\" />\n\n### Informações adicionais\n\nA versão que estou utilizando do mihon e a 0.20.4 e meu dispositivo é um Galaxy A15. Data do erro 13 de Setembro de 2026 (Domingo).\n",
+      "state": "closed",
+      "state_reason": "completed",
+      "created_at": "2026-09-13T22:53:21Z",
+      "updated_at": "2026-09-14T22:28:28Z",
+      "closed_at": "2026-09-14T22:28:20Z",
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/30",
+      "comments": 2,
+      "labels": [
+        {
+          "name": "Problema na extensão"
+        },
+        {
+          "name": "Mangá"
+        },
+        {
+          "name": "Concluído"
+        }
+      ],
+      "user": {
+        "login": "luanarbritto-commits"
+      }
+    },
+    {
+      "number": 31,
+      "title": "[Bug]:  Erro não carregamento das imagens no XXX YAOI",
+      "body": "### Tipo\n\nMangá\n\n### Nome da extensão\n\nXXX YAOI \n\n### Versão\n\n1.6.61\n\n### URL do site\n\nhttps://3xyaoi.com/\n\n### O que está quebrado?\n\n- [ ] Popular\n- [ ] Recentes\n- [ ] Busca\n- [ ] Filtros\n- [ ] Detalhes\n- [x] Capítulos/Episódios\n- [x] Leitor/Vídeo\n- [ ] Login\n- [ ] Outro\n\n### Quando começou, se souber\n\nO problema está desde ontem a noite, não carrega as imagens dos capítulos e no website tem uma nova informação quando você lê por um determinado período de tempo ou pela quantidade de capítulos lidos.Está informando que o leitor mudou, mas não sei o que isso significa !\n\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/d81af1d4-c3e1-4181-8235-26bfda1c6ff4\" />\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/bc22d5c4-21e9-4e8e-ba9b-42ec91fc4107\" />sta \n\n### O site funciona normalmente no navegador?\n\nParcialmente\n\n### Precisa de login?\n\nNão\n\n### Precisa de VIP/Premium?\n\nNão\n\n### Mensagem de erro\n\nMensagem de erro e no carregamento das imagens vou deixar a mesma imagem \n\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/69b0bbe0-1013-4b15-9189-1f536fc2cd09\" />\n\ndo erro aqui.\n\n### Informações adicionais\n\nNão teve atualização recente do mihon, verifiquei antes de abrir esse chamado, meu repositório que estou utilizando vou deixar a imagem.\nMihon: 0.20.4\nCelular: Galaxy A15 \n\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/a7cf77a3-5ffa-4dcf-84d0-20dfca3772cc\" />",
+      "state": "closed",
+      "state_reason": "completed",
+      "created_at": "2026-09-15T06:35:24Z",
+      "updated_at": "2026-09-16T23:24:49Z",
+      "closed_at": "2026-09-16T21:31:01Z",
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/31",
+      "comments": 4,
+      "labels": [
+        {
+          "name": "Problema na extensão"
+        },
+        {
+          "name": "Mangá"
+        },
+        {
+          "name": "Concluído"
+        }
+      ],
+      "user": {
+        "login": "luanarbritto-commits"
+      }
+    },
+    {
+      "number": 33,
+      "title": "[Fonte morta]: Ghost Scan, Nenhum resultado encontrado",
+      "body": "### Tipo\n\nMangá\n\n### Nome da extensão\n\nGhost Scan\n\n### URL\n\nhttps://ghostscan.xyz/cgi-sys/suspendedpage.cgi?m_orderby=views\n\n### Desde quando está offline, se souber\n\n_No response_\n\n### Observações\n\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/bf5dda7b-be44-48b4-982f-52c396c7c25c\" />\n\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/1853e7a5-fcbb-4845-993c-3af47713a9f5\" />",
+      "state": "closed",
+      "state_reason": "completed",
+      "created_at": "2026-09-16T19:11:18Z",
+      "updated_at": "2026-09-16T20:48:28Z",
+      "closed_at": "2026-09-16T20:48:23Z",
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/33",
+      "comments": 1,
+      "labels": [
+        {
+          "name": "Mangá"
+        },
+        {
+          "name": "Fonte indisponível"
+        },
+        {
+          "name": "Concluído"
+        }
+      ],
+      "user": {
+        "login": "Kah-M"
+      }
+    },
+    {
+      "number": 44,
+      "title": "[Sugestão]: redetoons",
+      "body": "### Extensão afetada, se houver\n\n_No response_\n\n### Tipo\n\nAnime\n\n### Descrição da sugestão\n\nAdicionar filtros de pesquisa, quando eu clico nos filtros aparece somente \"redefinir\". A minha sugestão é colocar novos filtros como filmes, séries e animes.\n\n### Motivo\n\nMelhora a procura de séries e filmes além dos animes que já estão na extensão.\n\n### Informações adicionais\n\n_No response_",
+      "state": "closed",
+      "state_reason": "completed",
+      "created_at": "2026-09-22T02:29:25Z",
+      "updated_at": "2026-09-23T03:32:50Z",
+      "closed_at": "2026-09-23T03:32:46Z",
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/44",
+      "comments": 1,
+      "labels": [
+        {
+          "name": "Anime"
+        },
+        {
+          "name": "Sugestão"
+        },
+        {
+          "name": "Concluído"
+        }
+      ],
+      "user": {
+        "login": "0luccas0"
+      }
+    },
+    {
+      "number": 45,
+      "title": "[Mudança de domínio]: Fenix Project não abre, WebView funciona",
+      "body": "### Tipo\n\nMangá\n\n### Nome da extensão\n\nFenix Project\n\n### URL antiga\n\nhttps://fenixproject.site/\n\n### URL nova\n\nhttps://fenixproject.website/\n\n### Observações\n\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/3ae80fd1-7b23-411f-9e70-4d417ea5fa8d\" />\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/406127f6-f424-41bc-b11b-68dffa51805c\" />",
+      "state": "closed",
+      "state_reason": "completed",
+      "created_at": "2026-09-23T18:38:48Z",
+      "updated_at": "2026-09-23T20:22:15Z",
+      "closed_at": "2026-09-23T20:22:15Z",
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/45",
+      "comments": 0,
+      "labels": [
+        {
+          "name": "Mangá"
+        },
+        {
+          "name": "Mudança de domínio"
+        }
+      ],
+      "user": {
+        "login": "Kah-M"
+      }
+    },
+    {
+      "number": 50,
+      "title": "[Bug]: Erro Leitor mudou XXX YAOI",
+      "body": "### Tipo\n\nMangá\n\n### Nome da extensão\n\nXXX YAOI \n\n### Versão\n\n1.6.63\n\n### URL do site\n\nhttps://3xyaoi.com/\n\n### O que está quebrado?\n\n- [ ] Popular\n- [ ] Recentes\n- [ ] Busca\n- [ ] Filtros\n- [ ] Detalhes\n- [x] Capítulos/Episódios\n- [x] Leitor/Vídeo\n- [ ] Login\n- [ ] Outro\n\n### Quando começou, se souber\n\nJá abri dois chamados anteriores sobre esse assunto resolvi dar um tempo para ver se voltaria a funcionar a Scan, porém continua com o mesmo erro dizendo que o \"\n\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/df1ea5c8-2036-4910-a8d4-c97a5bc4a0c9\" />\n\nleitor mudou\"\n\n### O site funciona normalmente no navegador?\n\nSim\n\n### Precisa de login?\n\nNão\n\n### Precisa de VIP/Premium?\n\nNão\n\n### Mensagem de erro\n\nNão consigo copiar a mensagem de erro pois ela aparece muito rápido e some, so tenho o print.\n\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/969ca8a4-0af2-41d3-9fde-1575096072e2\" />\n\n### Informações adicionais\n\nEu pensei que fosse ter que entrar com longin e senha, porém não resolveu.\nTentei mudar as configurações DNS o HTTPS mas não resolveu, mudei o user agent e nada também tirei a scan e voltei e o erro permanece, pensei que fosse a Extensão então voltei pra anterior o erro permaneceu da mesma forma, voltei para a project Nox.\n\nA versão do mihon está em 0.20.4 e meu celular é o Galaxy A15.\n\nAviso importante, tudo que eu testei eu voltei ao normal da forma que estava antes, a única coisa que não testei foi desinstalar o aplicativo e tentar novamente, pois não quero perder o registro das obras que estou acompanhando e as que eu tenho salva que terminei.\n\nI scan ela funciona normalmente na website, porém a partir de uma certa quantidade de capítulos que você lê, ele dá meio que uma travada e volta a funcionar depois.\n\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/1b990c5c-267e-4528-8fa2-023a85ddbdcc\" />\n\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/60449c48-fcba-4356-9dfe-81a0a7b29f0c\" />\n\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/1bfbb0ff-32c9-4385-9eeb-8c0b85f12bca\" />",
+      "state": "closed",
+      "state_reason": "completed",
+      "created_at": "2026-09-23T23:52:56Z",
+      "updated_at": "2026-09-25T01:30:38Z",
+      "closed_at": "2026-09-25T01:29:44Z",
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/50",
+      "comments": 2,
+      "labels": [
+        {
+          "name": "Problema na extensão"
+        },
+        {
+          "name": "Mangá"
+        },
+        {
+          "name": "Concluído"
+        }
+      ],
+      "user": {
+        "login": "luanarbritto-commits"
+      }
+    },
+    {
+      "number": 52,
+      "title": "[Bug]: Taimu Mangas",
+      "body": "### Tipo\n\nMangá\n\n### Nome da extensão\n\nTaimuMangas\n\n### Versão\n\n1.4.2\n\n### URL do site\n\nhttps://beta.taimumangas.com/\n\n### O que está quebrado?\n\n- [x] Popular\n- [x] Recentes\n- [ ] Busca\n- [x] Filtros\n- [ ] Detalhes\n- [ ] Capítulos/Episódios\n- [ ] Leitor/Vídeo\n- [ ] Login\n- [ ] Outro\n\n### Quando começou, se souber\n\nNão faço a mínima ideia, faz muito tempo que eu acessei essa extensão\n\n### O site funciona normalmente no navegador?\n\nSim\n\n### Precisa de login?\n\nNão\n\n### Precisa de VIP/Premium?\n\nNão\n\n### Mensagem de erro\n\nException while fetching data (/fetchSourceManga) : Este host não é conhecido (apiv2.taimumangas.com)\n\njava.net.UnknownHostException: apiv2.taimumangas.com\nat java.base/java.net.InetAddress$CachedLookup.get(Unknown Source)\nat java.base/java.net.InetAddress.getAllByName0(Unknown Source)\nat java.base/java.net.InetAddress.getAllByName(Unknown Source)\nat okhttp3.Dns$Companion$DnsSystem.lookup(Dns.kt:50)\nat okhttp3.internal.connection.RouteSelector.resetNextInetSocketAddress(RouteSelector.kt:170)\nat okhttp3.internal.connection.RouteSelector.nextProxy(RouteSelector.kt:132)\nat okhttp3.internal.connection.RouteSelector.next(RouteSelector.kt:70)\nat okhttp3.internal.connection.RealRoutePlanner.planConnect$okhttp(RealRoutePlanner.kt:168)\nat okhttp3.internal.connection.RealRoutePlanner.plan(RealRoutePlanner.kt:75)\nat okhttp3.internal.connection.FastFallbackExchangeFinder.launchTcpConnect(FastFallbackExchangeFinder.kt:119)\nat okhttp3.internal.connection.FastFallbackExchangeFinder.find(FastFallbackExchangeFinder.kt:62)\nat okhttp3.internal.connection.RealCall.initExchange$okhttp(RealCall.kt:304)\nat okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:32)\nat okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:332)\nat okhttp3.internal.cache.CacheInterceptor.intercept(CacheInterceptor.kt:98)\nat okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:332)\nat okhttp3.internal.http.BridgeInterceptor.intercept(BridgeInterceptor.kt:83)\nat okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:332)\nat okhttp3.internal.http.RetryAndFollowUpInterceptor.intercept(RetryAndFollowUpInterceptor.kt:72)\nat okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:332)\nat keiyoushi.a.d.intercept(Unknown Source)\nat okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:332)\nat eu.kanade.tachiyomi.network.interceptor.CloudflareInterceptor.intercept(CloudflareInterceptor.kt:44)\nat okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:332)\nat eu.kanade.tachiyomi.network.interceptor.UserAgentInterceptor.intercept(UserAgentInterceptor.kt:21)\nat okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:332)\nat eu.kanade.tachiyomi.network.interceptor.UncaughtExceptionInterceptor.intercept(UncaughtExceptionInterceptor.kt:18)\nat okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:332)\nat okhttp3.internal.connection.RealCall.getResponseWithInterceptorChain$okhttp(RealCall.kt:232)\nat okhttp3.internal.connection.RealCall.execute(RealCall.kt:187)\nat eu.kanade.tachiyomi.network.OkHttpExtensionsKt$asObservable$1$requestArbiter$1.request(OkHttpExtensions.kt:40)\nat rx.Subscriber.setProducer(Subscriber.java:211)\nat rx.internal.operators.OnSubscribeMap$MapSubscriber.setProducer(OnSubscribeMap.java:102)\nat rx.Subscriber.setProducer(Subscriber.java:205)\nat eu.kanade.tachiyomi.network.OkHttpExtensionsKt.asObservable$lambda$0(OkHttpExtensions.kt:60)\nat rx.Observable.unsafeSubscribe(Observable.java:10327)\nat rx.internal.operators.OnSubscribeDoOnEach.call(OnSubscribeDoOnEach.java:41)\nat rx.internal.operators.OnSubscribeDoOnEach.call(OnSubscribeDoOnEach.java:30)\nat rx.Observable.unsafeSubscribe(Observable.java:10327)\nat rx.internal.operators.OnSubscribeMap.call(OnSubscribeMap.java:48)\nat rx.internal.operators.OnSubscribeMap.call(OnSubscribeMap.java:33)\nat rx.internal.operators.OnSubscribeLift.call(OnSubscribeLift.java:48)\nat rx.internal.operators.OnSubscribeLift.call(OnSubscribeLift.java:30)\nat rx.Observable.subscribe(Observable.java:10423)\nat rx.Observable.subscribe(Observable.java:10390)\nat suwayomi.tachidesk.manga.impl.util.lang.RxCoroutineBridgeKt.awaitOne(RxCoroutineBridge.kt:28)\nat suwayomi.tachidesk.manga.impl.util.lang.RxCoroutineBridgeKt.awaitSingle(RxCoroutineBridge.kt:22)\nat eu.kanade.tachiyomi.source.CatalogueSource.getPopularManga$suspendImpl(CatalogueSource.kt:21)\nat eu.kanade.tachiyomi.source.CatalogueSource.getPopularManga(CatalogueSource.kt)\nat eu.kanade.tachiyomi.source.online.HttpSource.getPopularManga(HttpSource.kt:28)\nat suwayomi.tachidesk.graphql.mutations.SourceMutation$fetchSourceManga$1.invokeSuspend(SourceMutation.kt:271)\nat kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)\nat kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)\nat kotlinx.coroutines.internal.LimitedDispatcher$Worker.run(LimitedDispatcher.kt:124)\nat kotlinx.coroutines.scheduling.TaskImpl.run(Tasks.kt:89)\nat kotlinx.coroutines.scheduling.CoroutineScheduler.runSafely(CoroutineScheduler.kt:586)\nat kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.executeTask(CoroutineScheduler.kt:798)\nat kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.runWorker(CoroutineScheduler.kt:717)\nat kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.run(CoroutineScheduler.kt:704)\n\n### Informações adicionais\n\nNão tem como acessar nada, pela extensão não reconhecer o site, imagino que é isso que esse erro quer dizer.",
+      "state": "closed",
+      "state_reason": "completed",
+      "created_at": "2026-09-24T17:07:33Z",
+      "updated_at": "2026-09-24T18:37:03Z",
+      "closed_at": "2026-09-24T18:36:59Z",
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/52",
+      "comments": 1,
+      "labels": [
+        {
+          "name": "Problema na extensão"
+        },
+        {
+          "name": "Mangá"
+        },
+        {
+          "name": "Concluído"
+        }
+      ],
+      "user": {
+        "login": "otto09-cmd"
+      }
+    },
+    {
+      "number": 54,
+      "title": "[Mudança de domínio]:",
+      "body": "### Tipo\n\nAnime\n\n### Nome da extensão\n\nAnimeFire \n\n### URL antiga\n\nhttps://animefire.io\n\n### URL nova\n\nhttps://animefire.one/\n\n### Observações\n\nDesde que você não desista, sempre existirá salvação.” - Sasuke Uchiha",
+      "state": "closed",
+      "state_reason": "completed",
+      "created_at": "2026-09-24T23:55:54Z",
+      "updated_at": "2026-09-25T01:05:42Z",
+      "closed_at": "2026-09-25T01:05:37Z",
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/54",
+      "comments": 1,
+      "labels": [
+        {
+          "name": "Anime"
+        },
+        {
+          "name": "Mudança de domínio"
+        },
+        {
+          "name": "Concluído"
+        }
+      ],
+      "user": {
+        "login": "RaiKay01"
+      }
+    },
+    {
+      "number": 55,
+      "title": "[Bug]: TaimuMangas, Não foi possível resolver apiv2.taimumangas.com: NXDOMAIN",
+      "body": "### Tipo\n\nMangá\n\n### Nome da extensão\n\nTaimuMangas\n\n### Versão\n\n1.4.2\n\n### URL do site\n\nhttps://beta.taimumangas.com/\n\n### O que está quebrado?\n\n- [ ] Popular\n- [ ] Recentes\n- [ ] Busca\n- [ ] Filtros\n- [ ] Detalhes\n- [ ] Capítulos/Episódios\n- [ ] Leitor/Vídeo\n- [ ] Login\n- [ ] Outro\n\n### Quando começou, se souber\n\n_No response_\n\n### O site funciona normalmente no navegador?\n\nSim\n\n### Precisa de login?\n\nNão\n\n### Precisa de VIP/Premium?\n\nNão\n\n### Mensagem de erro\n\nNão foi possível resolver apiv2.taimumangas.com: NXDOMAIN\n\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/749b5b53-9889-4df2-8a18-fe505dc8f08c\" />\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/d759d7fa-233c-41b4-984d-c8fa242b4668\" />\n\n### Informações adicionais\n\n_No response_",
+      "state": "closed",
+      "state_reason": "duplicate",
+      "created_at": "2026-09-25T01:15:22Z",
+      "updated_at": "2026-10-28T20:22:48Z",
+      "closed_at": "2026-09-25T01:28:37Z",
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/55",
+      "comments": 1,
+      "labels": [
+        {
+          "name": "Problema na extensão"
+        },
+        {
+          "name": "Mangá"
+        },
+        {
+          "name": "Duplicado"
+        }
+      ],
+      "user": {
+        "login": "Kah-M"
+      }
+    },
+    {
+      "number": 56,
+      "title": "[Mudança de domínio]: AniTube",
+      "body": "### Tipo\n\nAnime\n\n### Nome da extensão\n\nAniTube \n\n### URL antiga\n\nhttps://www.gashita.info\n\n### URL nova\n\nhttps://animalog.in/\n\n### Observações\n\n_No response_",
+      "state": "closed",
+      "state_reason": "completed",
+      "created_at": "2026-09-25T02:16:07Z",
+      "updated_at": "2026-09-25T05:11:03Z",
+      "closed_at": "2026-09-25T05:10:15Z",
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/56",
+      "comments": 1,
+      "labels": [
+        {
+          "name": "Anime"
+        },
+        {
+          "name": "Mudança de domínio"
+        },
+        {
+          "name": "Concluído"
+        }
+      ],
+      "user": {
+        "login": "0luccas0"
+      }
+    },
+    {
+      "number": 57,
+      "title": "[Nova extensão]: Central novel",
+      "body": "### Tipo\n\nMangá\n\n### Nome da fonte/site\n\nCentral novel\n\n### URL do site\n\nhttps://centralnovel.com/\n\n### Idioma\n\nPortuguês Brasil \n\n### Precisa de login?\n\nNão\n\n### Precisa de VIP/Premium?\n\nNão\n\n### Conteúdo +18?\n\nNão\n\n### Observações\n\nSite de novels\n\n### Confirmações\n\n- [x] Confirmei que a extensão ainda não existe.\n- [x] Procurei Issues abertas e fechadas.\n- [x] Este ticket não é duplicado.\n- [x] Não incluí senha, token, cookie ou credencial privada.",
+      "state": "closed",
+      "state_reason": "completed",
+      "created_at": "2026-09-25T23:50:37Z",
+      "updated_at": "2026-09-26T00:43:36Z",
+      "closed_at": "2026-09-26T00:43:29Z",
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/57",
+      "comments": 1,
+      "labels": [
+        {
+          "name": "Mangá"
+        },
+        {
+          "name": "Nova extensão"
+        },
+        {
+          "name": "Recusado"
+        }
+      ],
+      "user": {
+        "login": "LUCASGYNBR"
+      }
+    },
+    {
+      "number": 58,
+      "title": "[Mudança de domínio]:",
+      "body": "### Tipo\n\nAnime\n\n### Nome da extensão\n\nAnikyuu\n\n### URL antiga\n\nhttps://anikyuu.to/\n\n### URL nova\n\nhttps://j-s-an.github.io/\n\n### Observações\n\nEle tem redirecionamento de página.",
+      "state": "closed",
+      "state_reason": "completed",
+      "created_at": "2026-09-26T03:00:16Z",
+      "updated_at": "2026-09-29T18:35:58Z",
+      "closed_at": "2026-09-29T18:35:58Z",
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/58",
+      "comments": 0,
+      "labels": [
+        {
+          "name": "Anime"
+        },
+        {
+          "name": "Mudança de domínio"
+        }
+      ],
+      "user": {
+        "login": "RaiKay01"
+      }
+    },
+    {
+      "number": 59,
+      "title": "[Bug]:",
+      "body": "### Tipo\n\nAnime\n\n### Nome da extensão\n\nStreamberry\n\n### Versão\n\n14.3\n\n### URL do site\n\nhttps://streamberry.com.br/\n\n### O que está quebrado?\n\n- [x] Popular\n- [x] Recentes\n- [x] Busca\n- [x] Filtros\n- [x] Detalhes\n- [x] Capítulos/Episódios\n- [x] Leitor/Vídeo\n- [x] Login\n- [x] Outro\n\n### Quando começou, se souber\n\nNão sei \n\n### O site funciona normalmente no navegador?\n\nSim\n\n### Precisa de login?\n\nNão\n\n### Precisa de VIP/Premium?\n\nNão\n\n### Mensagem de erro\n\nNenhum resultado encontrado\n\n### Informações adicionais\n\nO launcher do site mudou.",
+      "state": "closed",
+      "state_reason": "completed",
+      "created_at": "2026-09-26T04:19:41Z",
+      "updated_at": "2026-09-29T19:40:00Z",
+      "closed_at": "2026-09-29T19:40:00Z",
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/59",
+      "comments": 0,
+      "labels": [
+        {
+          "name": "Problema na extensão"
+        },
+        {
+          "name": "Anime"
+        }
+      ],
+      "user": {
+        "login": "RaiKay01"
+      }
+    },
+    {
+      "number": 61,
+      "title": "[Bug]: não esta mais pegando",
+      "body": "### Tipo\n\nAnime\n\n### Nome da extensão\n\nStreamberry\n\n### Versão\n\n14.3\n\n### URL do site\n\nhttps://streamberry.com.br/\n\n### O que está quebrado?\n\n- [ ] Popular\n- [ ] Recentes\n- [ ] Busca\n- [ ] Filtros\n- [ ] Detalhes\n- [ ] Capítulos/Episódios\n- [ ] Leitor/Vídeo\n- [ ] Login\n- [ ] Outro\n\n### Quando começou, se souber\n\n_No response_\n\n### O site funciona normalmente no navegador?\n\nSim\n\n### Precisa de login?\n\nNão\n\n### Precisa de VIP/Premium?\n\nNão\n\n### Mensagem de erro\n\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/0981f815-6a76-42db-9491-b57bf837a2a3\" />\n\n### Informações adicionais\n\nMesmo abrindo o web vew e voltando nn abre a extensao",
+      "state": "closed",
+      "state_reason": "duplicate",
+      "created_at": "2026-09-26T15:40:56Z",
+      "updated_at": "2026-10-28T20:22:47Z",
+      "closed_at": "2026-09-28T20:39:57Z",
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/61",
+      "comments": 0,
+      "labels": [
+        {
+          "name": "Problema na extensão"
+        },
+        {
+          "name": "Anime"
+        },
+        {
+          "name": "Duplicado"
+        }
+      ],
+      "user": {
+        "login": "vijordao09"
+      }
+    },
+    {
+      "number": 63,
+      "title": "[Bug]: Little Tyrant",
+      "body": "### Tipo\n\nMangá\n\n### Nome da extensão\n\nLittle Tyrant\n\n### Versão\n\n1.4.65\n\n### URL do site\n\nhttps://tiraninha.world/\n\n### O que está quebrado?\n\n- [x] Popular\n- [x] Recentes\n- [ ] Busca\n- [ ] Filtros\n- [ ] Detalhes\n- [x] Capítulos/Episódios\n- [ ] Leitor/Vídeo\n- [ ] Login\n- [ ] Outro\n\n### Quando começou, se souber\n\nÉ um erro recente, é de depois do dia 21.\n\n### O site funciona normalmente no navegador?\n\nSim\n\n### Precisa de login?\n\nNão\n\n### Precisa de VIP/Premium?\n\nNão\n\n### Mensagem de erro\n\nCould not load manga\nError message not found.\n\naparece quando tento atualizar uma obra\n\n### Informações adicionais\n\nNa parte de popular e recentes apenas aparece \"No manga found\"; a pesquisa e o filtro funcionam; não é possível atualizar as obras nem ler os caps antigos; os caps antigos pedem o flaresolverr para resolver os desafios do cloudfare, porém mesmo com ele ativo não carrega as imagens(se quiser posso mandar o erro que aparece pedindo pelo flaresolverr.)",
+      "state": "closed",
+      "state_reason": "completed",
+      "created_at": "2026-09-26T19:51:47Z",
+      "updated_at": "2026-09-29T05:16:01Z",
+      "closed_at": "2026-09-29T05:15:57Z",
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/63",
+      "comments": 1,
+      "labels": [
+        {
+          "name": "Problema na extensão"
+        },
+        {
+          "name": "Mangá"
+        },
+        {
+          "name": "Concluído"
+        }
+      ],
+      "user": {
+        "login": "otto09-cmd"
+      }
+    },
+    {
+      "number": 65,
+      "title": "[Bug]: Little Tyrant, Nenhum resultado encontrado",
+      "body": "### Tipo\n\nMangá\n\n### Nome da extensão\n\nLittle Tyrant\n\n### Versão\n\n1.4.68\n\n### URL do site\n\nhttps://tiraninha.world/\n\n### O que está quebrado?\n\n- [ ] Popular\n- [ ] Recentes\n- [ ] Busca\n- [ ] Filtros\n- [ ] Detalhes\n- [ ] Capítulos/Episódios\n- [ ] Leitor/Vídeo\n- [ ] Login\n- [ ] Outro\n\n### Quando começou, se souber\n\n_No response_\n\n### O site funciona normalmente no navegador?\n\nSim\n\n### Precisa de login?\n\nNão\n\n### Precisa de VIP/Premium?\n\nNão\n\n### Mensagem de erro\n\nNenhum resultado encontrado\n\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/36cdaa49-76cf-476a-851b-caa57c473560\" />\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/66762d16-542f-41b9-a2bb-2bbed1fb5ae8\" />\n\n### Informações adicionais\n\n_No response_",
+      "state": "closed",
+      "state_reason": "duplicate",
+      "created_at": "2026-09-27T04:06:20Z",
+      "updated_at": "2026-10-28T20:22:46Z",
+      "closed_at": "2026-09-27T12:35:30Z",
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/65",
+      "comments": 1,
+      "labels": [
+        {
+          "name": "Problema na extensão"
+        },
+        {
+          "name": "Mangá"
+        },
+        {
+          "name": "Duplicado"
+        }
+      ],
+      "user": {
+        "login": "Kah-M"
+      }
+    },
+    {
+      "number": 66,
+      "title": "[Mudança de domínio]:",
+      "body": "### Tipo\n\nAnime\n\n### Nome da extensão\n\nAnimeQ\n\n### URL antiga\n\nhttps://animeq.com/\n\n### URL nova\n\nhttps://animeq.cloud/\n\n### Observações\n\nMudou o design do site.",
+      "state": "closed",
+      "state_reason": "completed",
+      "created_at": "2026-09-27T19:16:53Z",
+      "updated_at": "2026-09-29T21:15:00Z",
+      "closed_at": "2026-09-29T21:15:00Z",
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/66",
+      "comments": 0,
+      "labels": [
+        {
+          "name": "Anime"
+        },
+        {
+          "name": "Mudança de domínio"
+        }
+      ],
+      "user": {
+        "login": "RaiKay01"
+      }
+    },
+    {
+      "number": 94,
+      "title": "[Nova extensão]:",
+      "body": "### Tipo\n\nAnime\n\n### Nome da fonte/site\n\nCine Gratis\n\n### URL do site\n\nhttps://cinegratis.co/\n\n### Idioma\n\nPortuguês Brasil \n\n### Precisa de login?\n\nNão\n\n### Precisa de VIP/Premium?\n\nNão\n\n### Conteúdo +18?\n\nNão\n\n### Observações\n\nDescubra o catálogo do cinegratis.tv com navegação por ano, gênero, idioma e país. Use as listas e filtros para decidir rápido e montar sua fila de sessões.\n\nNavegue por coleções editoriais cuidadosamente organizadas com sinopses claras e dados técnicos completos. Cada página reúne ficha técnica, elenco, duração, país de origem e etiquetas úteis para filtrar rapidamente. O foco é facilitar a escolha com organização por ano, gênero, popularidade e preferências de idioma. As recomendações relacionam obras parecidas para ampliar sua lista sem sair do site. O conteúdo prioriza visual limpo, navegação simples e informação objetiva para decidir sem enrolação. Navegue por coleções editoriais cuidadosamente organizadas com sinopses claras e dados técnicos completos. Cada página reúne ficha técnica, elenco\n\n### Confirmações\n\n- [x] Confirmei que a extensão ainda não existe.\n- [x] Procurei Issues abertas e fechadas.\n- [x] Este ticket não é duplicado.\n- [x] Não incluí senha, token, cookie ou credencial privada.",
+      "state": "closed",
+      "state_reason": "completed",
+      "created_at": "2026-10-12T04:12:25Z",
+      "updated_at": "2026-10-12T05:24:37Z",
+      "closed_at": "2026-10-12T05:24:37Z",
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/94",
+      "comments": 0,
+      "labels": [
+        {
+          "name": "Anime"
+        },
+        {
+          "name": "Nova extensão"
+        },
+        {
+          "name": "Recusado"
+        }
+      ],
+      "user": {
+        "login": "RaiKay01"
+      }
+    },
+    {
+      "number": 100,
+      "title": "[Nova extensão]:",
+      "body": "### Tipo\n\nMangá\n\n### Nome da fonte/site\n\nAnimesOnline\n\n### URL do site\n\nhttps://animesonline.lat/\n\n### Idioma\n\nPortuguês Brasil \n\n### Precisa de login?\n\nNão\n\n### Precisa de VIP/Premium?\n\nNão\n\n### Conteúdo +18?\n\nNão\n\n### Observações\n\n2026 AnimesOnline — Todos os direitos reservados. Feito para quem lê mangá.\n\nConteúdo de terceiros. Veja nossa política DMCA.\n\n### Confirmações\n\n- [x] Confirmei que a extensão ainda não existe.\n- [x] Procurei Issues abertas e fechadas.\n- [x] Este ticket não é duplicado.\n- [x] Não incluí senha, token, cookie ou credencial privada.",
+      "state": "closed",
+      "state_reason": "completed",
+      "created_at": "2026-10-17T04:44:40Z",
+      "updated_at": "2026-10-17T23:19:55Z",
+      "closed_at": "2026-10-17T23:19:55Z",
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/100",
+      "comments": 0,
+      "labels": [
+        {
+          "name": "Mangá"
+        },
+        {
+          "name": "Nova extensão"
+        },
+        {
+          "name": "Recusado"
+        }
+      ],
+      "user": {
+        "login": "RaiKay01"
+      }
+    },
+    {
+      "number": 103,
+      "title": "[Mudança de domínio]:",
+      "body": "### Tipo\n\nAnime\n\n### Nome da extensão\n\nRedeToons \n\n### URL antiga\n\nhtpps://redetoons.gay/browse\n\n### URL nova\n\nhttps://redetoons.beer/browse\n\n### Observações\n\nSó mudou o domínio nada mais.",
+      "state": "closed",
+      "state_reason": "completed",
+      "created_at": "2026-10-19T03:14:15Z",
+      "updated_at": "2026-10-19T03:19:23Z",
+      "closed_at": "2026-10-19T03:19:23Z",
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/103",
+      "comments": 1,
+      "labels": [
+        {
+          "name": "Anime"
+        },
+        {
+          "name": "Mudança de domínio"
+        }
+      ],
+      "user": {
+        "login": "RaiKay01"
+      }
+    },
+    {
+      "number": 111,
+      "title": "[Bug]: Little Tyrant",
+      "body": "### Tipo\n\nMangá\n\n### Nome da extensão\n\nLittle Tyrant\n\n### Versão\n\n1.6.69\n\n### URL do site\n\nhttps://tiraninha.world/\n\n### O que está quebrado?\n\n- [ ] Popular\n- [ ] Recentes\n- [ ] Busca\n- [ ] Filtros\n- [x] Detalhes\n- [ ] Capítulos/Episódios\n- [ ] Leitor/Vídeo\n- [ ] Login\n- [ ] Outro\n\n### Quando começou, se souber\n\nHoje\n\n### O site funciona normalmente no navegador?\n\nSim\n\n### Precisa de login?\n\nNão\n\n### Precisa de VIP/Premium?\n\nNão\n\n### Mensagem de erro\n\nCould not load manga\nHTTP error 401\n\n### Informações adicionais\n\nNão consigo mais atualizar uma obra ou ver uma obra nova, os capítulos não aparecem.",
+      "state": "closed",
+      "state_reason": "completed",
+      "created_at": "2026-10-23T16:33:14Z",
+      "updated_at": "2026-10-27T02:19:33Z",
+      "closed_at": "2026-10-27T02:19:33Z",
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/111",
+      "comments": 1,
+      "labels": [
+        {
+          "name": "Problema na extensão"
+        },
+        {
+          "name": "Mangá"
+        }
+      ],
+      "user": {
+        "login": "otto09-cmd"
+      }
+    },
+    {
+      "number": 123,
+      "title": "[Nova extensão]: Secozzi",
+      "body": "### Tipo de extensão\n\nAnime\n\n### Nome da fonte\n\nSecozzi\n\n### URL do site\n\nhttps://github.com/Secozzi/aniyomi-extensions/releases/tag/7717051\n\n### Idioma\n\nTodos\n\n### Precisa de login?\n\nSim\n\n### Precisa de VIP/Premium?\n\nNão\n\n### Conteúdo +18?\n\nSim\n\n### Observações (opcional)\n\nEle atualiza as extençoes stremio, torbox e jellyfin regularmente ... ou quando elas param de funcionar ... sempre usei as deles ... funciona normal ... ",
+      "state": "open",
+      "state_reason": null,
+      "created_at": "2026-11-01T03:38:36Z",
+      "updated_at": "2026-11-01T03:38:47Z",
+      "closed_at": null,
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/123",
+      "comments": 0,
+      "labels": [
+        {
+          "name": "Anime"
+        },
+        {
+          "name": "Nova extensão"
+        },
+        {
+          "name": "Em análise"
+        },
+        {
+          "name": "Conteúdo +18"
+        }
+      ],
+      "user": {
+        "login": "F3niIxX"
+      }
+    },
+    {
+      "number": 124,
+      "title": "[Problema na extensão]: Little Tyrant",
+      "body": "### Tipo de extensão\n\nMangá\n\n### Nome da extensão\n\nLittle Tyrant\n\n### Versão da extensão\n\n1.6.70\n\n### Aplicativo utilizado\n\nSuwayomi\n\n### Parte afetada\n\nPopular / Recentes\n\n### O que está acontecendo?\n\nA parte de popular e recentes não esta funcionando, ainda é possível acessar obras ja favoritadas, porem apenas partes das imagens carregam e o download não é possível.\n\n### Como reproduzir?\n\nAbrir a extensão\n\n### Informações complementares (opcional)\n\nMensagem de erro na parte dos recentes \nಥ_ಥ\nUnable to load data\nException while fetching data (/fetchSourceManga) : timeout…\n\njava.io.IOException: timeout\nat keiyoushi.b.b.a(Unknown Source)\nat keiyoushi.b.b.a(Unknown Source)\nat eu.kanade.tachiyomi.b.a.k.a(Unknown Source)\nat eu.kanade.tachiyomi.b.a.k.a(Unknown Source)\nat eu.kanade.tachiyomi.b.a.k.getLatestUpdates(Unknown Source)\nat suwayomi.tachidesk.graphql.mutations.SourceMutation$fetchSourceManga$1.invokeSuspend(SourceMutation.kt:281)\nat kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)\nat kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)\nat kotlinx.coroutines.internal.LimitedDispatcher$Worker.run(LimitedDispatcher.kt:124)\nat kotlinx.coroutines.scheduling.TaskImpl.run(Tasks.kt:89)\nat kotlinx.coroutines.scheduling.CoroutineScheduler.runSafely(CoroutineScheduler.kt:586)\nat kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.executeTask(CoroutineScheduler.kt:798)\nat kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.runWorker(CoroutineScheduler.kt:717)\nat kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.run(CoroutineScheduler.kt:704)\nCaused by: java.net.SocketTimeoutException: timeout\nat okhttp3.internal.http2.Http2Stream$StreamTimeout.newTimeoutException(Http2Stream.kt:731)\nat okhttp3.internal.http2.Http2Stream$StreamTimeout.exitAndThrowIfTimedOut(Http2Stream.kt:739)\nat okhttp3.internal.http2.Http2Stream.takeHeaders(Http2Stream.kt:159)\nat okhttp3.internal.http2.Http2ExchangeCodec.readResponseHeaders(Http2ExchangeCodec.kt:105)\nat okhttp3.internal.connection.Exchange.readResponseHeaders(Exchange.kt:117)\nat okhttp3.internal.http.CallServerInterceptor.intercept(CallServerInterceptor.kt:97)\nat okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:332)\nat keiyoushi.b.c.intercept(Unknown Source)\nat okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:332)\nat keiyoushi.b.a.intercept(Unknown Source)\nat okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:332)\nat eu.kanade.tachiyomi.a.a.a.a.intercept(Unknown Source)\nat okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:332)\nat okhttp3.logging.HttpLoggingInterceptor.intercept(HttpLoggingInterceptor.kt:249)\nat okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:332)\nat okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:34)\nat okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:332)\nat okhttp3.internal.cache.CacheInterceptor.intercept(CacheInterceptor.kt:98)\nat okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:332)\nat okhttp3.internal.http.BridgeInterceptor.intercept(BridgeInterceptor.kt:83)\nat okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:332)\nat okhttp3.internal.http.RetryAndFollowUpInterceptor.intercept(RetryAndFollowUpInterceptor.kt:72)\nat okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:332)\nat okhttp3.CompressionInterceptor.intercept(CompressionInterceptor.kt:52)\nat okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:332)\nat eu.kanade.tachiyomi.network.interceptor.CloudflareInterceptor.intercept(CloudflareInterceptor.kt:47)\nat okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:332)\nat keiyoushi.b.f.intercept(Unknown Source)\nat okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:332)\nat eu.kanade.tachiyomi.network.interceptor.UserAgentInterceptor.intercept(UserAgentInterceptor.kt:21)\nat okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:332)\nat eu.kanade.tachiyomi.network.interceptor.UncaughtExceptionInterceptor.intercept(UncaughtExceptionInterceptor.kt:18)\nat okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:332)\nat okhttp3.internal.connection.RealCall.getResponseWithInterceptorChain$okhttp(RealCall.kt:234)\nat okhttp3.internal.connection.RealCall$AsyncCall.run(RealCall.kt:582)\nat java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(Unknown Source)\nat java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(Unknown Source)\nat java.base/java.lang.Thread.run(Unknown Source)",
+      "state": "closed",
+      "state_reason": "completed",
+      "created_at": "2026-11-02T02:58:27Z",
+      "updated_at": "2026-11-02T16:27:21Z",
+      "closed_at": "2026-11-02T16:27:24Z",
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/124",
+      "comments": 1,
+      "labels": [
+        {
+          "name": "Problema na extensão"
+        },
+        {
+          "name": "Mangá"
+        },
+        {
+          "name": "Em análise"
+        }
+      ],
+      "user": {
+        "login": "otto09-cmd"
+      }
+    },
+    {
+      "number": 125,
+      "title": "[Problema na extensão]: hanami heaven — Hanami",
+      "body": "### Tipo de extensão\n\nMangá\n\n### Nome da extensão\n\nhanami heaven\n\n### Versão da extensão\n\n1.6.60\n\n### Aplicativo utilizado\n\nMihon\n\n### Parte afetada\n\nMetadados\n\n### O que está acontecendo?\n\nMihon update erro.txt\n! Attempt to invoke virtual method 'java.lang.Class java.lang.Object.getClass()' on a null object reference\n\nErro HTTP 400\n\n### Como reproduzir?\n\nAbre o menu de títulos da extensão e mostra o erro HTTP 400\n\n### Informações complementares (opcional)\n\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/869c1bdd-54a2-4b4d-a236-63d6d9e76027\" />\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/5d1480e2-a977-456f-bb4f-82343a1ff27f\" />",
+      "state": "open",
+      "state_reason": null,
+      "created_at": "2026-11-02T09:52:08Z",
+      "updated_at": "2026-11-02T09:52:24Z",
+      "closed_at": null,
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/125",
+      "comments": 0,
+      "labels": [
+        {
+          "name": "Problema na extensão"
+        },
+        {
+          "name": "Mangá"
+        },
+        {
+          "name": "Em análise"
+        }
+      ],
+      "user": {
+        "login": "LUCASGYNBR"
+      }
+    },
+    {
+      "number": 126,
+      "title": "[Nova extensão]: Saímo tv",
+      "body": "### Tipo de extensão\n\nAnime\n\n### Nome da fonte\n\nSaímo tv\n\n### URL do site\n\nhttps://saimo-tv.pages.dev\n\n### Idioma\n\nPortuguês (Brasil)\n\n### Precisa de login?\n\nNão\n\n### Precisa de VIP/Premium?\n\nNão\n\n### Conteúdo +18?\n\nNão\n\n### Observações (opcional)\n\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/d0170baf-6458-4f75-9de4-25d21ca0a83a\" />",
+      "state": "open",
+      "state_reason": null,
+      "created_at": "2026-11-03T10:54:58Z",
+      "updated_at": "2026-11-03T10:55:08Z",
+      "closed_at": null,
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/126",
+      "comments": 0,
+      "labels": [
+        {
+          "name": "Anime"
+        },
+        {
+          "name": "Nova extensão"
+        },
+        {
+          "name": "Em análise"
+        }
+      ],
+      "user": {
+        "login": "vijordao09"
+      }
+    },
+    {
+      "number": 128,
+      "title": "[Problema na extensão]: Redetoons — Extensão com problema",
+      "body": "### Tipo de extensão\n\nAnime\n\n### Nome da extensão\n\nRedetoons\n\n### Versão da extensão\n\n14,5\n\n### Aplicativo utilizado\n\nTadami\n\n### Parte afetada\n\nPopular / Recentes\n\n### O que está acontecendo?\n\nO menu tá com esse nome \n\nJsonDecodingException: Unexpected JSON token at offset\n\n0: Expected start of the object '{', but had '<' instead at\n\npath: $\n\nJSON input: <!DOCTYPE html><html lang=\"pt-.....\n\n### Como reproduzir?\n\nHonestamente não sei o que fazer nessa parte \n\n### Informações complementares (opcional)\n\n<img width=\"1080\" height=\"2400\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/76739f73-b4ea-458a-bdf0-31e03c91fbe8\" />",
+      "state": "open",
+      "state_reason": null,
+      "created_at": "2026-11-04T00:30:32Z",
+      "updated_at": "2026-11-04T00:30:43Z",
+      "closed_at": null,
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/128",
+      "comments": 0,
+      "labels": [
+        {
+          "name": "Problema na extensão"
+        },
+        {
+          "name": "Anime"
+        },
+        {
+          "name": "Em análise"
+        }
+      ],
+      "user": {
+        "login": "monarcalorde169-beep"
+      }
+    },
+    {
+      "number": 130,
+      "title": "[Mudança de domínio]: Fleur Blanche",
+      "body": "### Tipo de extensão\n\nMangá\n\n### Nome da extensão\n\nFleur Blanche \n\n### URL antiga\n\nhttp://fbsquadx.com\n\n### URL nova\n\nhttp://Fbsscan.com\n\n### Observações (opcional)\n\n_No response_",
+      "state": "closed",
+      "state_reason": "completed",
+      "created_at": "2026-11-05T13:40:51Z",
+      "updated_at": "2026-11-18T00:56:26Z",
+      "closed_at": "2026-11-18T00:56:25Z",
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/130",
+      "comments": 4,
+      "labels": [
+        {
+          "name": "Mangá"
+        },
+        {
+          "name": "Mudança de domínio"
+        },
+        {
+          "name": "Em análise"
+        }
+      ],
+      "user": {
+        "login": "jjaekyung897-coder"
+      }
+    },
+    {
+      "number": 132,
+      "title": "[Problema na extensão]: Bakai — Bakai no pages found",
+      "body": "### Tipo de extensão\n\nMangá\n\n### Nome da extensão\n\nBakai\n\n### Versão da extensão\n\n1.6.21\n\n### Aplicativo utilizado\n\nMihon v0.21.3\n\n### Parte afetada\n\nLeitor / Imagens\n\n### O que está acontecendo?\n\nNa hora de abri o capítulo aparece o erro: No pages found\n\n### Como reproduzir?\n\nAbrir a extensão -> selecionar uma obra -> abrir o capítulo -> erro\n\n### Informações complementares (opcional)\n\n_No response_",
+      "state": "open",
+      "state_reason": null,
+      "created_at": "2026-11-07T21:01:53Z",
+      "updated_at": "2026-11-20T13:52:05Z",
+      "closed_at": null,
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/132",
+      "comments": 1,
+      "labels": [
+        {
+          "name": "Problema na extensão"
+        },
+        {
+          "name": "Mangá"
+        },
+        {
+          "name": "Em análise"
+        }
+      ],
+      "user": {
+        "login": "lyras11"
+      }
+    },
+    {
+      "number": 134,
+      "title": "[Problema na extensão]: Monte tai — Problema na extensão monte tai: lentidão nos dowloads de capitulos",
+      "body": "### Tipo de extensão\n\nMangá\n\n### Nome da extensão\n\nMonte tai \n\n### Versão da extensão\n\n1.6.64\n\n### Aplicativo utilizado\n\nTachimanga\n\n### Parte afetada\n\nPopular / Recentes\n\n### O que está acontecendo?\n\nDownloads de capítulos de qualquer obra desta extensão estão demorando muito pra baixar\n\n### Como reproduzir?\n\nEu aberto o botão de baixar capítulos e demora bastante pra baixar os capitulos q eu coloquei \n\n### Informações complementares (opcional)\n\n_No response_",
+      "state": "open",
+      "state_reason": null,
+      "created_at": "2026-11-09T09:39:20Z",
+      "updated_at": "2026-11-09T09:39:30Z",
+      "closed_at": null,
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/134",
+      "comments": 0,
+      "labels": [
+        {
+          "name": "Problema na extensão"
+        },
+        {
+          "name": "Mangá"
+        },
+        {
+          "name": "Em análise"
+        }
+      ],
+      "user": {
+        "login": "Flyscorpionbr22"
+      }
+    },
+    {
+      "number": 137,
+      "title": "[Mudança de domínio]: RedeToons",
+      "body": "### Tipo de extensão\n\nAnime\n\n### Nome da extensão\n\nRedeToons \n\n### URL antiga\n\npt.redetoons\n\n### URL nova\n\nredetoons.network\n\n### Observações (opcional)\n\nFui abrir a extensão RedeToons e apareceu isso:\n\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/53adcea7-ad34-457b-9023-12aff0ff0369\" />\n\nAbri o site para comparar e apareceu isso:\n\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/933cec11-8d2d-4adb-894f-60447181fc5d\" />",
+      "state": "open",
+      "state_reason": null,
+      "created_at": "2026-11-09T19:53:46Z",
+      "updated_at": "2026-11-09T19:53:57Z",
+      "closed_at": null,
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/137",
+      "comments": 0,
+      "labels": [
+        {
+          "name": "Anime"
+        },
+        {
+          "name": "Mudança de domínio"
+        },
+        {
+          "name": "Em análise"
+        }
+      ],
+      "user": {
+        "login": "mikhg397-cmyk"
+      }
+    },
+    {
+      "number": 138,
+      "title": "[Mudança de domínio]: CineVEO",
+      "body": "### Tipo de extensão\n\nAnime\n\n### Nome da extensão\n\nCineVEO\n\n### URL antiga\n\npt.cineveo\n\n### URL nova\n\ncineveo.cfd\n\n### Observações (opcional)\n\nFui abri a extensão CineVEO e apareceu isso:\n\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/cc1f09f5-b7a5-4949-a3b7-8845b186fe28\" />\n\nLogo em seguida fui abrir o site pra comparar e apareceu isto:\n\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/1ddf197f-8591-47b1-961e-8925a130d8f7\" />",
+      "state": "open",
+      "state_reason": null,
+      "created_at": "2026-11-09T19:56:44Z",
+      "updated_at": "2026-11-09T19:56:54Z",
+      "closed_at": null,
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/138",
+      "comments": 0,
+      "labels": [
+        {
+          "name": "Anime"
+        },
+        {
+          "name": "Mudança de domínio"
+        },
+        {
+          "name": "Em análise"
+        }
+      ],
+      "user": {
+        "login": "mikhg397-cmyk"
+      }
+    },
+    {
+      "number": 139,
+      "title": "[Problema na extensão]: Animeplayer",
+      "body": "### Tipo de extensão\n\nAnime\n\n### Nome da extensão\n\nAnimeplayer\n\n### Versão da extensão\n\n14.11\n\n### Aplicativo utilizado\n\nKomikku\n\n### Parte afetada\n\nEpisódios / Vídeo\n\n### O que está acontecendo?\n\nFui abrir um episódio de Dragon Ball e o episódio não reproduzia não importava quantas vezes eu tentasse tenho até imagem:\n\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/a70f3f81-2cd5-416e-bded-54f84be3a127\" />\n\nTalvez seja mudança de domínio ja que o domínio mudou talvez seja isso:\n\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/3a466165-314c-4960-ac4f-b2f2ce2f17df\" />\n\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/5a21d669-5a1b-4272-b6f1-4adacd620bb5\" />\n\n### Como reproduzir?\n\nAbria a extensão, em seguida abria o Dragon Ball mas quando ia iniciar o episódio aparecia isso:\n\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/f2f8f020-152f-4860-874b-c7067f82b6d0\" />\n\n### Informações complementares (opcional)\n\n_No response_",
+      "state": "open",
+      "state_reason": null,
+      "created_at": "2026-11-09T20:05:24Z",
+      "updated_at": "2026-11-09T20:05:34Z",
+      "closed_at": null,
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/139",
+      "comments": 0,
+      "labels": [
+        {
+          "name": "Problema na extensão"
+        },
+        {
+          "name": "Anime"
+        },
+        {
+          "name": "Em análise"
+        }
+      ],
+      "user": {
+        "login": "mikhg397-cmyk"
+      }
+    },
+    {
+      "number": 140,
+      "title": "[Nova extensão]: WatchAnimeHentai",
+      "body": "### Tipo de extensão\n\nAnime\n\n### Nome da fonte\n\nWatchAnimeHentai\n\n### URL do site\n\nhttps://www.watchanimehentai.com/pt/\n\n### Idioma\n\nPortuguês (Brasil)\n\n### Precisa de login?\n\nNão\n\n### Precisa de VIP/Premium?\n\nNão\n\n### Conteúdo +18?\n\nSim\n\n### Observações (opcional)\n\nUm site que segundo adms é a \"fênix do hentaitube\":\n\n<img width=\"1079\" height=\"634\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/b8ae7e13-fd8a-42aa-857f-b6691acc6e49\" />",
+      "state": "open",
+      "state_reason": null,
+      "created_at": "2026-11-09T20:13:21Z",
+      "updated_at": "2026-11-09T20:13:33Z",
+      "closed_at": null,
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/140",
+      "comments": 0,
+      "labels": [
+        {
+          "name": "Anime"
+        },
+        {
+          "name": "Nova extensão"
+        },
+        {
+          "name": "Em análise"
+        },
+        {
+          "name": "Conteúdo +18"
+        }
+      ],
+      "user": {
+        "login": "mikhg397-cmyk"
+      }
+    },
+    {
+      "number": 142,
+      "title": "[Nova extensão]: watchanimehentai",
+      "body": "### Tipo de extensão\n\nAnime\n\n### Nome da fonte\n\nwatchanimehentai\n\n### URL do site\n\nhttps://www.watchanimehentai.com/pt/\n\n### Idioma\n\nPortuguês (Brasil)\n\n### Precisa de login?\n\nNão\n\n### Precisa de VIP/Premium?\n\nNão\n\n### Conteúdo +18?\n\nSim\n\n### Observações (opcional)\n\nEla parece ser muito boa. Não cheguei a usar muito, mas pelo menos quem usa costuma elogiar. Além disso, pelo que vi, ela é uma espécie de ressurreição do antigo Hentai Tube, um site que era bastante popular, mas acabou saindo do ar do nada. Pelo visto, os administradores decidiram trazê-lo de volta.\n<img width=\"1080\" height=\"2400\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/46f64ba2-5052-49be-8188-e3222d86637a\" />",
+      "state": "closed",
+      "state_reason": "completed",
+      "created_at": "2026-11-10T02:13:26Z",
+      "updated_at": "2026-11-10T02:16:17Z",
+      "closed_at": "2026-11-10T02:16:17Z",
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/142",
+      "comments": 0,
+      "labels": [
+        {
+          "name": "Anime"
+        },
+        {
+          "name": "Nova extensão"
+        },
+        {
+          "name": "Em análise"
+        },
+        {
+          "name": "Conteúdo +18"
+        }
+      ],
+      "user": {
+        "login": "ghost"
+      }
+    },
+    {
+      "number": 143,
+      "title": "[Nova extensão]: hentaihaven",
+      "body": "### Tipo de extensão\n\nAnime\n\n### Nome da fonte\n\nhentaihaven\n\n### URL do site\n\nhttps://hentaihaven.xxx/\n\n### Idioma\n\nPortuguês (Brasil)\n\n### Precisa de login?\n\nNão\n\n### Precisa de VIP/Premium?\n\nNão\n\n### Conteúdo +18?\n\nSim\n\n### Observações (opcional)\n\nSe você olhar as extensões em inglês que estão no teu repositório, vai encontrar essa. Porém, esse site organiza os conteúdos de uma maneira bem diferente. A extensão que já existe no teu repositório é focada apenas no conteúdo em inglês e não exibe o conteúdo em português. É justamente por isso que estou fazendo esse pedido.",
+      "state": "open",
+      "state_reason": null,
+      "created_at": "2026-11-10T03:22:49Z",
+      "updated_at": "2026-11-10T03:28:00Z",
+      "closed_at": null,
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/143",
+      "comments": 2,
+      "labels": [
+        {
+          "name": "Anime"
+        },
+        {
+          "name": "Nova extensão"
+        },
+        {
+          "name": "Em análise"
+        },
+        {
+          "name": "Conteúdo +18"
+        }
+      ],
+      "user": {
+        "login": "ghost"
+      }
+    },
+    {
+      "number": 144,
+      "title": "[Sugestão]: Blackout Comics",
+      "body": "### Título ou resumo\n\nManter o login na Blackout Comics\n\n### Descrição da melhoria\n\nAtualmente, para conseguir usar a extensão da Blackout Comics deve ir no Webview e logar toda vez que acessa a extensão. A melhoria é fazer com que não seja necessário logar no Webview toda vez que se vai na extensão, e se possível fazer o login pelo Source Configuration, não pelo webview.\n\n### Extensão relacionada (opcional)\n\n_No response_\n\n### Informações complementares (opcional)\n\nComo o login na Medíocre, por exemplo.",
+      "state": "open",
+      "state_reason": null,
+      "created_at": "2026-11-10T19:10:25Z",
+      "updated_at": "2026-11-10T19:10:35Z",
+      "closed_at": null,
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/144",
+      "comments": 0,
+      "labels": [
+        {
+          "name": "Sugestão"
+        },
+        {
+          "name": "Em análise"
+        }
+      ],
+      "user": {
+        "login": "otto09-cmd"
+      }
+    },
+    {
+      "number": 145,
+      "title": "[Problema na extensão]: Blackout Comics — Blackout Comics HTTP 403, verifique o site na WebView",
+      "body": "Tipo de extensão\n\nMangá\n\nNome da extensão\n\nBlackout Comics\n\nVersão da extensão\n\n1.6.12\n\nAplicativo utilizado\n\nKomikku / Reikai\n\nParte afetada\n\nPopular / Recentes\n\nO que está acontecendo?\n\nEstou enfrentando um problema recorrente ao utilizar a extensão Blackout Comics nos aplicativos Komikku e Reikai.\n\nInicialmente, tudo funciona normalmente: consigo acessar as obras, abrir os capítulos e começar a leitura sem dificuldades. Entretanto, durante a leitura, de maneira aparentemente aleatória, algumas páginas deixam de carregar. Em determinados momentos, ao chegar a um capítulo ou continuar avançando na leitura, encontro uma tela preta no lugar do conteúdo, com a seguinte mensagem:\n\n\"HTTP 403, verifique o site na WebView\"\n\nEssa tela também apresenta duas opções: \"Tentar novamente\" e \"Abrir na WebView\".\n\nAo selecionar \"Abrir na WebView\", não consigo continuar a leitura diretamente. Em vez disso, sou direcionado para uma página do próprio site Blackout Comics com a seguinte mensagem:\n\n403 – Acesso Proibido\n\n\"Você não tem permissão para acessar este recurso.\"\n\nPara conseguir continuar lendo, preciso clicar em \"Voltar ao Início\", aguardar o carregamento da página inicial do site e pesquisar novamente o nome da obra que estava lendo. Depois disso, consigo acessar o conteúdo normalmente pelo próprio site, através da WebView.\n\nO problema é que preciso repetir esse procedimento sempre que o erro acontece, pois não consigo continuar normalmente pelo leitor integrado do aplicativo.\n\nJá testei em dois leitores diferentes, Reikai e Komikku, e o problema acontece em ambos.\n\nImportante: o erro não parece estar restrito a capítulos específicos. Consigo ler vários capítulos normalmente e, de repente, o problema volta a aparecer. Inicialmente, identifiquei a falha nos capítulos 1 e 2 da obra \"Alguém Para Ela!\", mas, após continuar utilizando a extensão, percebi que ela ocorre de maneira intermitente, não sendo possível limitar o problema a esses capítulos.\n\nComo reproduzir?\n\n1. Abrir a extensão Blackout Comics.\n2. Acessar a obra \"Alguém Para Ela!\".\n3. Abrir um dos capítulos e iniciar a leitura normalmente.\n4. Continuar rolando as páginas para baixo.\n5. Em determinado momento, algumas páginas deixam de carregar e aparece uma tela preta com a mensagem \"HTTP 403, verifique o site na WebView\".\n6. Selecionar \"Abrir na WebView\".\n\nAo fazer isso, sou direcionado para a página de erro 403 do próprio site Blackout Comics.\n\nPara conseguir continuar a leitura, preciso selecionar \"Voltar ao Início\", aguardar o site carregar novamente e pesquisar a obra manualmente.\n\nObservação: o problema acontece aparentemente de forma aleatória, portanto, não consegui estabelecer um capítulo específico ou uma sequência exata que reproduza a falha em todas as tentativas.\n\nInformações complementares (opcional)\n\nOntem, abri uma issue relatando esse mesmo problema. Entretanto, como percebi que outros capítulos continuavam carregando normalmente, inclusive consegui ler o quarto capítulo sem dificuldades, pensei inicialmente que fosse apenas uma falha pontual que não precisasse ser reportada. Por esse motivo, acabei fechando a issue.\n\nNo entanto, o erro voltou a acontecer em outras ocasiões. Por isso, decidi trazer o problema novamente para investigação.\n\nAinda não consegui verificar se a falha também acontece em outras obras, mas posso confirmar que ocorreu durante a leitura de \"Alguém Para Ela!\".\n\nGostaria de destacar que considero a Blackout Comics uma fonte muito boa, principalmente pela alta qualidade das páginas. Acredito que vale bastante a pena manter essa extensão funcionando, por isso agradeço desde já se puder investigar e, se possível, corrigir esse problema.\n\nCapturas de tela dos erros:\n\nAs imagens abaixo mostram o comportamento apresentado durante a leitura no Reikai e no Komikku, incluindo a tela de erro 403.\n\n<img width=\"1080\" height=\"2400\" alt=\"Erro HTTP 403 durante a leitura no Reikai\" src=\"https://github.com/user-attachments/assets/70480d11-8f7e-42b4-a2b2-dc204846d97e\" /><img width=\"1080\" height=\"2400\" alt=\"Erro HTTP 403 durante a leitura no Komikku\" src=\"https://github.com/user-attachments/assets/10cb17f7-1622-42e0-a55b-07510f2c65c6\" /><img width=\"1080\" height=\"2400\" alt=\"Erro durante a leitura no Reikai\" src=\"https://github.com/user-attachments/assets/e82119f5-4221-4b02-938f-f6c1448f7ae4\" /><img width=\"1080\" height=\"2400\" alt=\"Erro durante a leitura no Reikai\" src=\"https://github.com/user-attachments/assets/07753f8d-0b7d-4e1b-9ea9-47df361be43c\" />",
+      "state": "open",
+      "state_reason": "reopened",
+      "created_at": "2026-11-11T08:17:32Z",
+      "updated_at": "2026-11-13T15:24:46Z",
+      "closed_at": null,
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/145",
+      "comments": 0,
+      "labels": [
+        {
+          "name": "Problema na extensão"
+        },
+        {
+          "name": "Mangá"
+        },
+        {
+          "name": "Em análise"
+        }
+      ],
+      "user": {
+        "login": "ghost"
+      }
+    },
+    {
+      "number": 146,
+      "title": "[Problema na extensão]: Argos Comics — Argos Comics http 404",
+      "body": "### Tipo de extensão\n\nMangá\n\n### Nome da extensão\n\nArgos Comics\n\n### Versão da extensão\n\n1.6.65\n\n### Aplicativo utilizado\n\nReikai\n\n### Parte afetada\n\nOutro\n\n### O que está acontecendo?\n\nQuanto eu tento olhar os capítulos de alguma obra acontece o erro da imagem e eu tenho um cadastro no site \n\n<img width=\"1080\" height=\"2400\" alt=\"Screenshot_2026-11-11-10-37-23-938_app reikai\" src=\"https://github.com/user-attachments/assets/9c454352-380c-4af3-a35c-e324331bfaf1\" />\n<img width=\"1080\" height=\"2400\" alt=\"Screenshot_2026-11-11-10-36-52-915_app reikai\" src=\"https://github.com/user-attachments/assets/a7ae560a-5263-4f5b-a2b7-d2760ebc0485\" />\n\n### Como reproduzir?\n\nAcessar a extensão e tentar olhar qualquer obra \n\n### Informações complementares (opcional)\n\n_No response_",
+      "state": "open",
+      "state_reason": null,
+      "created_at": "2026-11-11T13:42:36Z",
+      "updated_at": "2026-11-11T13:42:45Z",
+      "closed_at": null,
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/146",
+      "comments": 0,
+      "labels": [
+        {
+          "name": "Problema na extensão"
+        },
+        {
+          "name": "Mangá"
+        },
+        {
+          "name": "Em análise"
+        }
+      ],
+      "user": {
+        "login": "ghost"
+      }
+    },
+    {
+      "number": 148,
+      "title": "[Problema na extensão]: Fliptru — Não está aparecendo todos os capitulos das obras dessa extensão",
+      "body": "### Tipo de extensão\n\nMangá\n\n### Nome da extensão\n\nFliptru\n\n### Versão da extensão\n\n1.6.5\n\n### Aplicativo utilizado\n\nTachimanga\n\n### Parte afetada\n\nCapítulos\n\n### O que está acontecendo?\n\nN está aparecendo todos os capítulos das obras dessa extensão, so mostra so 10 capítulos das obras q tem no site so que tem obras q tem mais de 10 capitulos so que n esta aparecendo no app so mostra 10 capítulos e nd mais \n\n### Como reproduzir?\n\nVc entra nas obras q tem no site todas aparecem q so tem 10 capítulos e n mostra mas nd mais de 10 capitulos \n\n> ``\n\n### Informações complementares (opcional)\n\n_No response_",
+      "state": "open",
+      "state_reason": null,
+      "created_at": "2026-11-12T03:06:08Z",
+      "updated_at": "2026-11-12T03:06:16Z",
+      "closed_at": null,
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/148",
+      "comments": 0,
+      "labels": [
+        {
+          "name": "Problema na extensão"
+        },
+        {
+          "name": "Mangá"
+        },
+        {
+          "name": "Em análise"
+        }
+      ],
+      "user": {
+        "login": "Flyscorpionbr22"
+      }
+    },
+    {
+      "number": 149,
+      "title": "[Nova extensão]: Wacht anime hentai",
+      "body": "### Tipo de extensão\n\nAnime\n\n### Nome da fonte\n\nWacht anime hentai\n\n### URL do site\n\nhttps://www.watchanimehentai.com/pt/ranking-do-site/\n\n### Idioma\n\nPortuguês (Brasil)\n\n### Precisa de login?\n\nNão\n\n### Precisa de VIP/Premium?\n\nNão\n\n### Conteúdo +18?\n\nNão\n\n### Observações (opcional)\n\n<img width=\"1080\" height=\"2400\" alt=\"Screenshot_20261112-074227\" src=\"https://github.com/user-attachments/assets/7eb2cb00-be20-4d8e-abae-c0f608f258f9\" />",
+      "state": "open",
+      "state_reason": null,
+      "created_at": "2026-11-12T10:46:33Z",
+      "updated_at": "2026-11-12T10:46:44Z",
+      "closed_at": null,
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/149",
+      "comments": 0,
+      "labels": [
+        {
+          "name": "Anime"
+        },
+        {
+          "name": "Nova extensão"
+        },
+        {
+          "name": "Em análise"
+        }
+      ],
+      "user": {
+        "login": "pica6944-a11y"
+      }
+    },
+    {
+      "number": 150,
+      "title": "[Problema na extensão]: Xxxyaoi — Problemas com a extensão",
+      "body": "### Tipo de extensão\n\nMangá\n\n### Nome da extensão\n\nXxxyaoi \n\n### Versão da extensão\n\n0.21.3\n\n### Aplicativo utilizado\n\nMihon\n\n### Parte afetada\n\nCapítulos\n\n### O que está acontecendo?\n\nAparece a mensagem \"Não há nada aqui ou falha ao contornar a cloudflare \n\n### Como reproduzir?\n\nSempre quando acesso a extensão os capítulos nem carregam mais\n\n### Informações complementares (opcional)\n\n_No response_",
+      "state": "open",
+      "state_reason": null,
+      "created_at": "2026-11-13T07:56:18Z",
+      "updated_at": "2026-11-13T07:56:29Z",
+      "closed_at": null,
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/150",
+      "comments": 0,
+      "labels": [
+        {
+          "name": "Problema na extensão"
+        },
+        {
+          "name": "Mangá"
+        },
+        {
+          "name": "Em análise"
+        }
+      ],
+      "user": {
+        "login": "jjaekyung897-coder"
+      }
+    },
+    {
+      "number": 151,
+      "title": "[Sugestão]: Adicionar sistema de cadastro e login de contas do Hanami Heaven na extensão",
+      "body": "### Título ou resumo\n\nPermitir que o usuário cadastre uma conta no site Hanami Heaven e faça login diretamente pela extensão.\n\n### Descrição da melhoria\n\nGostaria de sugerir a implementação de um sistema de cadastro e autenticação de contas do Hanami Heaven diretamente pela extensão.\n\nAtualmente, existem obras no site Hanami Heaven que só aparecem ou ficam acessíveis quando o usuário está conectado à sua conta. Por esse motivo, seria muito útil poder realizar o cadastro e o login diretamente pela extensão, sem precisar acessar o site separadamente pelo navegador.\n\nA ideia é permitir que o usuário crie uma nova conta pela própria extensão ou faça login caso já possua uma conta cadastrada, mantendo sua sessão ativa durante o uso.\n\nComo referência, poderiam utilizar um sistema semelhante ao que já existe nas extensões KuroMangas e Ink Scan, que permitem a integração com as contas dos respectivos sites e o gerenciamento da sessão diretamente pelo aplicativo.\n\nTambém seria interessante disponibilizar opções para manter a conta conectada e sair da conta quando desejar.\n\nO principal objetivo dessa implementação é permitir que as obras que dependem de autenticação no site também apareçam e possam ser acessadas normalmente pela extensão, proporcionando uma experiência mais completa e prática aos usuários.\n\n### Extensão relacionada (opcional)\n\nHanami Heaven \n\n### Informações complementares (opcional)\n\n<img width=\"1080\" height=\"617\" alt=\"IMG_20261114_192428\" src=\"https://github.com/user-attachments/assets/c58845e1-2dd0-479a-8fb7-9580fd5a84f6\" />\nUm exemplo é Stop Smoking, que está sendo publicada oficialmente no Brasil pela Toomics. Em situações como essa, a scan pode optar por implementar um sistema de proteção que exija que o usuário esteja conectado à sua conta para visualizar determinadas obras, evitando possíveis problemas relacionados aos direitos autorais. Por isso, seria interessante disponibilizar o cadastro e o login diretamente pela extensão, permitindo que os usuários continuem acessando essas obras mesmo quando esse tipo de proteção for adotado.",
+      "state": "open",
+      "state_reason": null,
+      "created_at": "2026-11-14T22:29:01Z",
+      "updated_at": "2026-11-14T22:57:00Z",
+      "closed_at": null,
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/151",
+      "comments": 1,
+      "labels": [
+        {
+          "name": "Sugestão"
+        },
+        {
+          "name": "Em análise"
+        }
+      ],
+      "user": {
+        "login": "eusouoscar"
+      }
+    },
+    {
+      "number": 153,
+      "title": "[Mudança de domínio]: Fleur Blanche",
+      "body": "### Tipo de extensão\n\nMangá\n\n### Nome da extensão\n\nFleur Blanche \n\n### URL antiga\n\nhttps://fbsscan.com/\n\n### URL nova\n\nhttps://squadxfbs.com/\n\n### Observações (opcional)\n\n_No response_",
+      "state": "closed",
+      "state_reason": "completed",
+      "created_at": "2026-11-17T22:38:02Z",
+      "updated_at": "2026-11-18T00:32:45Z",
+      "closed_at": "2026-11-18T00:32:45Z",
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/153",
+      "comments": 1,
+      "labels": [
+        {
+          "name": "Mangá"
+        },
+        {
+          "name": "Mudança de domínio"
+        },
+        {
+          "name": "Em análise"
+        }
+      ],
+      "user": {
+        "login": "jjaekyung897-coder"
+      }
+    },
+    {
+      "number": 154,
+      "title": "[Problema na extensão]: Xxxyaoi — Bloqueio",
+      "body": "### Tipo de extensão\n\nMangá\n\n### Nome da extensão\n\nXxxyaoi \n\n### Versão da extensão\n\n0.21.3\n\n### Aplicativo utilizado\n\nMihon\n\n### Parte afetada\n\nPopular / Recentes\n\n### O que está acontecendo?\n\nAparece que o site bloqueou o acesso e as vezes aparece falha ao contornar a cloudflare \n\n### Como reproduzir?\n\nAssim que abro o capítulo na biblioteca aparece o aviso que o xxxyaoi bloqueou o acesso do mihon e se for fazer download do capítulo aparece falha de contornar cloudflare \n\n### Informações complementares (opcional)\n\n_No response_",
+      "state": "open",
+      "state_reason": null,
+      "created_at": "2026-11-17T22:43:20Z",
+      "updated_at": "2026-11-17T22:43:34Z",
+      "closed_at": null,
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/154",
+      "comments": 0,
+      "labels": [
+        {
+          "name": "Problema na extensão"
+        },
+        {
+          "name": "Mangá"
+        },
+        {
+          "name": "Em análise"
+        }
+      ],
+      "user": {
+        "login": "jjaekyung897-coder"
+      }
+    },
+    {
+      "number": 156,
+      "title": "[Problema na extensão]: Animes Digital — Animes Digital Não Reproduz",
+      "body": "### Tipo de extensão\n\nAnime\n\n### Nome da extensão\n\nAnimes Digital\n\n### Versão da extensão\n\n16.13\n\n### Aplicativo utilizado\n\nAnizen\n\n### Parte afetada\n\nEpisódios / Vídeo\n\n### O que está acontecendo?\n\nNão está reproduzindo episódios \n\n### Como reproduzir?\n\nAbrir a Extensão e selecionar qualquer episodio\n\n### Informações complementares (opcional)\n\n_No response_",
+      "state": "open",
+      "state_reason": null,
+      "created_at": "2026-11-20T08:15:13Z",
+      "updated_at": "2026-11-20T08:15:23Z",
+      "closed_at": null,
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/156",
+      "comments": 0,
+      "labels": [
+        {
+          "name": "Problema na extensão"
+        },
+        {
+          "name": "Anime"
+        },
+        {
+          "name": "Em análise"
+        }
+      ],
+      "user": {
+        "login": "vituhas"
+      }
+    },
+    {
+      "number": 157,
+      "title": "[Problema na extensão]: Manhuarm — Manga log-in murim capítulos errados",
+      "body": "### Tipo de extensão\n\nMangá\n\n### Nome da extensão\n\nManhuarm\n\n### Versão da extensão\n\n1 6.4\n\n### Aplicativo utilizado\n\nMihon\n\n### Parte afetada\n\nCapítulos\n\n### O que está acontecendo?\n\nOs capítulos de log-in murim está errado. Portanto o capítulos 259 é o 252. \nReparei no URL no navegador do no mihon web está \nhttps://manhuarmtl.com/manga/log-in-murim/ , e no navegador está https://manhuarmtl.com/manga/log-in-murim-2/\n\nAtualmente está com 255 capítulos \n\n\n### Como reproduzir?\n\nAbrir o log-in-murim no manhuarmtl e encontrar o erro de nomenclatura dos capítulos\n\n### Informações complementares (opcional)\n\nOs capítulos de log-in murim está errado. Portanto o capítulos 259 é o 252. \nReparei no URL no navegador do no mihon web está \nhttps://manhuarmtl.com/manga/log-in-murim/ , e no navegador está https://manhuarmtl.com/manga/log-in-murim-2/\n\nAtualmente está com 255 capítulos \n\n<img width=\"1080\" height=\"2340\" alt=\"Screenshot_20261120-132004_Mihon\" src=\"https://github.com/user-attachments/assets/1d14d2a6-b269-4f7e-b8f0-688a15659e17\" />\n\n<img width=\"1080\" height=\"2340\" alt=\"Screenshot_20261120-132018_Brave\" src=\"https://github.com/user-attachments/assets/ba5ea284-95a2-449a-9e80-51c4dd14f7a0\" />",
+      "state": "open",
+      "state_reason": null,
+      "created_at": "2026-11-20T16:24:09Z",
+      "updated_at": "2026-11-20T16:31:07Z",
+      "closed_at": null,
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/157",
+      "comments": 1,
+      "labels": [
+        {
+          "name": "Problema na extensão"
+        },
+        {
+          "name": "Mangá"
+        },
+        {
+          "name": "Em análise"
+        }
+      ],
+      "user": {
+        "login": "LUCASGYNBR"
+      }
+    }
+  ]
+}

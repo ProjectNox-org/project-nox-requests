@@ -362,6 +362,21 @@ Não
         self.assertNotIn("Conteúdo +18", res["final_labels"])
         self.assertIn("Conteúdo +18", res["labels_to_remove"])
 
+    def test_closed_duplicate_never_receives_em_analise(self):
+        body = """### Tipo de extensão
+Anime
+### Nome da fonte
+WatchAnimeHentai
+"""
+        res = simulate_workflow(
+            "[Nova extensão]: WatchAnimeHentai",
+            body,
+            ["Nova extensão", "Anime", "Duplicado"],
+            is_closed=True,
+        )
+        self.assertNotIn("Em análise", res["labels_to_add"])
+        self.assertNotIn("Em análise", res["final_labels"])
+
     # -------------------------------------------------------------------------
     # YAML Structure & Empty Defaults Tests
     # -------------------------------------------------------------------------

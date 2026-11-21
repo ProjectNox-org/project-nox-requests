@@ -33,6 +33,18 @@ Utilize esta central para:
 
 ---
 
+## 🛡️ Nox Duplicate Guard
+
+Este repositório utiliza o **Nox Duplicate Guard** para reduzir tickets repetidos e agilizar a triagem:
+
+- **Prevenção prévia no Tracker:** ao clicar em **Abrir Solicitação** no Tracker, é possível pesquisar demandas parecidas e votar com 👍 antes de abrir uma nova Issue.
+- **Triagem automática:** após a abertura ou edição de uma Issue, o workflow [`duplicate-guard.yml`](.github/workflows/duplicate-guard.yml) compara os campos estruturados do formulário (tipo, fonte/extensão, domínio normalizado, parte afetada, erro e contexto temporal).
+- **Tratamento seguro:** duplicatas ambíguas recebem apenas um aviso com links para revisão humana; somente duplicatas comprovadas contra tickets abertos compatíveis podem ser formalmente marcadas com `Duplicado`.
+
+Consulte a documentação técnica completa em [**docs/DUPLICATE_GUARD.md**](docs/DUPLICATE_GUARD.md).
+
+---
+
 ## 🔗 Ecossistema Project Nox
 
 | Área | Repositório de Distribuição (App) | Repositório de Código-fonte (Dev) |
