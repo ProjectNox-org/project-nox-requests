@@ -144,6 +144,12 @@ def simulate_workflow(issue_title, issue_body, current_labels, is_closed=False):
 
     if not is_closed and not has_status and not has_res:
         labels_to_add.add("Em análise")
+    if is_closed or has_res:
+        labels_to_add.discard("Em análise")
+        labels_to_add.discard("Aguardando informações")
+        for stale in ("Em análise", "Aguardando informações", "status:triage", "status:needs-info"):
+            if stale in labels:
+                labels_to_remove.add(stale)
 
     final_labels = (labels.union(labels_to_add)) - labels_to_remove
 
@@ -376,6 +382,27 @@ WatchAnimeHentai
         )
         self.assertNotIn("Em análise", res["labels_to_add"])
         self.assertNotIn("Em análise", res["final_labels"])
+
+        # If Em análise existed before close/race, workflow removes it on closed duplicate while keeping category & type
+        res_race = simulate_workflow(
+            "[Nova extensão]: WatchAnimeHentai",
+            body,
+            ["Nova extensão", "Anime", "Em análise", "Duplicado"],
+            is_closed=True,
+        )
+        self.assertIn("Em análise", res_race["labels_to_remove"])
+        self.assertNotIn("Em análise", res_race["final_labels"])
+        self.assertEqual(res_race["final_labels"], ["Anime", "Duplicado", "Nova extensão"])
+
+        # Open issues continue receiving Em análise automatically
+        res_open = simulate_workflow(
+            "[Nova extensão]: WatchAnimeHentai",
+            body,
+            ["Nova extensão", "Anime"],
+            is_closed=False,
+        )
+        self.assertIn("Em análise", res_open["labels_to_add"])
+        self.assertIn("Em análise", res_open["final_labels"])
 
     # -------------------------------------------------------------------------
     # YAML Structure & Empty Defaults Tests

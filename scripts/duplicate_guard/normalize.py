@@ -438,7 +438,7 @@ _ERROR_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("login_auth", re.compile(r"\blogin\b|\bautenticac[aã]o\b|\bcadastro\b|\bsess[aã]o\b|\bconta\b.*\bentrar\b", re.I)),
     ("slow_download", re.compile(r"\blentid[aã]o\b|\bdemorando\b|\bdemora\b.*\bbaixar\b|\bdownload.*\blento\b", re.I)),
     ("missing_chapters", re.compile(r"\bnao\s+(?:esta|estao)\s+aparecendo\s+todos\s+os\s+capitulos\b|\bso\s+mostra\s+\d+\s+capitulos\b|\bfaltando\s+capitulos\b", re.I)),
-    ("video_playback", re.compile(r"\bnao\s+reproduz\b|\bvideo\s+nao\s+carrega\b|\berro\s+ao\s+reproduzir\b|\bplayer\b", re.I)),
+    ("video_playback", re.compile(r"\b(?:nao\s+reproduz(?:iu|ia|em|iram)?\b|\bvideo\s+nao\s+carrega\b|\berro\s+ao\s+reproduzir\b|\bplayer\b)", re.I)),
     ("site_blocked", re.compile(r"\bsite\s+bloqueou\b|\bbloqueou\s+o\s+acesso\b|\bbloqueio\b", re.I)),
 )
 
@@ -464,7 +464,6 @@ def extract_error_signatures(text: str) -> tuple[frozenset[str], frozenset[str]]
             continue
         code = m.group(1)
         sigs.add(f"http:{code}")
-        tech.add(f"http:{code}")
 
     for m in _TECH_HOST_RE.finditer(norm):
         host = m.group(1).lower()
@@ -532,3 +531,346 @@ def sanitize_for_markdown(value: str, max_len: int = 120) -> str:
     if len(text) > max_len:
         text = text[: max_len - 1].rstrip() + "…"
     return text
+
+
+_LANG_ALIASES: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("pt", re.compile(r"\b(?:portugues(?:\s*\(?\s*brasil\s*\)?)?|pt-?br|pt)\b", re.I)),
+    ("en", re.compile(r"\b(?:ingles(?:es)?|english|en-?us|en-?gb)\b", re.I)),
+    ("es", re.compile(r"\b(?:espanhol|espanol|spanish|es-?la|es)\b", re.I)),
+    ("ru", re.compile(r"\b(?:russo|russian|ru)\b", re.I)),
+    ("ja", re.compile(r"\b(?:japones|japanese|jp|ja)\b", re.I)),
+    ("ko", re.compile(r"\b(?:coreano|korean|ko)\b", re.I)),
+    ("zh", re.compile(r"\b(?:chines|chinese|zh)\b", re.I)),
+    ("fr", re.compile(r"\b(?:frances|french|fr)\b", re.I)),
+    ("it", re.compile(r"\b(?:italiano|italian|it)\b", re.I)),
+    ("de", re.compile(r"\b(?:alemao|german|de)\b", re.I)),
+)
+
+_LANG_TOKEN_WORD_RE = (
+    r"(?:portugues(?:\s*\(?\s*brasil\s*\)?)?|pt-?br|ingles(?:es)?|english|en-?us|"
+    r"espanhol|espanol|spanish|russo|russian|japones|japanese|coreano|korean|"
+    r"chines|chinese|frances|french|italiano|italian|alemao|german)"
+)
+
+_EXISTING_ONLY_LANG_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(rf"\b(?:extens[aõ]es?|extensao|repositorio|focad[ao]s?|apenas|so|somente)\s+(?:esta[o]?\s+)?(?:em|para|no)?\s*(?:conteudo\s+em\s+|idioma\s+)?({_LANG_TOKEN_WORD_RE})\b", re.I),
+    re.compile(rf"\bapenas\s+(?:o\s+)?(?:conteudo\s+)?(?:em|de)\s+({_LANG_TOKEN_WORD_RE})\b", re.I),
+)
+
+_DESIRED_LANG_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(rf"\b(?:nao\s+(?:exibe|mostra|tem|possui|suporta|carrega|tras|traz)|sem|falta(?:ndo)?|suporte\s+(?:a|ao|para)?|adicionar(?:\s+suporte)?|incluir|acessar)\s+(?:o\s+|a\s+|os\s+|as\s+)?(?:conteudo|catalogo|legendas?|obras?|manga[s]?|anime[s]?|idioma)?\s*(?:em|para|de)?\s*({_LANG_TOKEN_WORD_RE})\b", re.I),
+    re.compile(rf"\b(?:tambem|preciso|quero)\b[^.]{{0,35}}\b(?:em|para)\s+({_LANG_TOKEN_WORD_RE})\b", re.I),
+)
+
+_ALREADY_EXISTS_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\bextens(?:ao|oes)\b[^.]{0,55}\b(?:ja\s+existe|ja\s+tem|no\s+(?:teu\s+|seu\s+)?repositorio|esta\s+no\s+repositorio|vai\s+encontrar)\b", re.I),
+    re.compile(r"\bja\s+existe\s+(?:a\s+extensao|no\s+(?:teu\s+|seu\s+)?repositorio|essa\s+extensao|uma\s+extensao|no\s+catalogo)\b", re.I),
+    re.compile(r"\b(?:na|da|a)\s+extensao\s+(?:atual|existente|ja\s+existente|que\s+ja\s+existe)\b", re.I),
+    re.compile(r"\b(?:extensao|fonte)\s+ja\s+existe\b", re.I),
+    re.compile(r"\b(?:corrigir|consertar|atualizar|melhorar|modificar|adicionar\s+suporte\s+na)\s+(?:a\s+)?extensao\b", re.I),
+    re.compile(r"\b(?:focad[ao]\s+apenas|nao\s+exibe\s+o\s+conteudo|nao\s+mostra\s+o\s+conteudo)\b", re.I),
+)
+
+_FEATURE_TOPIC_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("lang_locale", re.compile(r"\b(?:idioma[s]?|lingua[s]?|linguagem|traducao|legendado|dublado|suporte\s+(?:a|ao|para)?\s*(?:portugues|pt-?br|ingles|english|espanhol|russo|japones)|nao\s+exibe\s+o\s+conteudo\s+em)\b", re.I)),
+    ("login_account", re.compile(r"\b(?:fazer\s+login|sistema\s+de\s+(?:login|cadastro)|autenticac|cookies?\s+de\s+sessao|sincronizar\s+conta|suporte\s+(?:a|ao|de)\s+(?:login|cadastro|conta)|login\s+e\s+cadastro|cadastro\s+(?:e\s+login|de\s+contas?))\b", re.I)),
+    ("search_filter", re.compile(r"\b(?:filtro[s]?|filtrar|pesquisa\s+avancada|busca\s+avancada|ordenar|ordenacao|por\s+(?:genero[s]?|ano\s+de\s+lancamento|tags?))\b", re.I)),
+    ("catalog_section", re.compile(r"\b(?:organiza\s+os\s+conteudos|aba\s+de\s+(?:populares|recentes|em\s+alta)|secao\s+(?:novos|populares|recentes))\b", re.I)),
+    ("nsfw_adult", re.compile(r"\b(?:ocultar\s+nsfw|filtro\s+\+?18|blur\s+nsfw|modo\s+seguro)\b", re.I)),
+    ("download_export", re.compile(r"\b(?:download\s+em\s+lote|baixar\s+todos|exportar\s+historico|backup\s+em\s+json|exportar\s+para\s+(?:cbz|pdf|json))\b", re.I)),
+    ("tracker_sync", re.compile(r"\b(?:anilist|myanimelist|kitsu|mangaupdates|rastreamento|sincronizar\s+progresso)\b", re.I)),
+    ("video_player_quality", re.compile(r"\b(?:qualidade\s+(?:do\s+)?(?:video|episodio|player|reproducao)|resolucao\s+(?:do\s+)?video|1080p|720p|480p|servidor\s+alternativo|player\s+alternativo|escolher\s+servidor)\b", re.I)),
+    ("reader_layout", re.compile(r"\b(?:modo\s+leitura|pagina\s+dupla|leitura\s+webtoon|corte\s+de\s+imagem)\b", re.I)),
+    ("cloudflare_webview", re.compile(r"\b(?:contornar\s+a?\s*cloudflare|bypass\s+cloudflare|custom\s+dns|doh)\b", re.I)),
+)
+
+_SYMPTOM_TOPIC_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("wrong_chapters", re.compile(r"\b(?:capitulos?\s+errados?|obra\s+errada|manga\s+errado|anime\s+errado|capitulos?\s+trocados?|conteudos?\s+trocados?|misturados?|de\s+outra\s+obra)\b", re.I)),
+    ("chapter_order", re.compile(r"\b(?:fora\s+de\s+ordem|ordem\s+inversa|ordem\s+dos\s+capitulos|numeracao\s+errada|capitulos?\s+duplicados?)\b", re.I)),
+    ("missing_content", re.compile(r"\b(?:nao\s+(?:esta|estao)\s+aparecendo\s+todos|faltando\s+(?:capitulos?|episodios?|paginas?|obras?)|nao\s+exibe\s+(?:o\s+)?conteudo|so\s+mostra\s+\d+|ausente[s]?)\b", re.I)),
+    ("no_pages_or_empty", re.compile(r"\b(?:no\s+pages\s+found|nenhuma\s+pagina|sem\s+paginas|paginas?\s+nao\s+carregam?|paginas?\s+brancas?|imagens?\s+nao\s+carregam?|imagens?\s+quebradas?)\b", re.I)),
+    ("audio_subtitle", re.compile(r"\b(?:legenda[s]?|dublado|audio|dessincronizad[ao]|sem\s+audio|sem\s+legenda)\b", re.I)),
+    ("vip_paywall", re.compile(r"\b(?:vip|premium|assinatura|moedas?|coins?|pago|paywall)\b", re.I)),
+    ("infinite_loading", re.compile(r"\b(?:carregamento\s+infinito|carregando\s+infinitamente|loop\s+infinito|nunca\s+carrega|nao\s+sai\s+do\s+carregando)\b", re.I)),
+    ("site_redesign", re.compile(r"\b(?:reformulou|mudou\s+(?:o\s+)?site|mudou\s+(?:a\s+)?interface|mudou\s+(?:o\s+)?layout|novo\s+layout|nova\s+interface|estrutura\s+do\s+site)\b", re.I)),
+    ("slow_download", re.compile(r"\b(?:lentidao|muito\s+lento|demora(?:ndo)?\s+(?:muito\s+)?(?:para|pra)?\s*baixar|download\s+lento)\b", re.I)),
+    ("auth_failure", re.compile(r"\b(?:erro\s+(?:de|no)\s+login|nao\s+consigo\s+(?:fazer\s+)?login|autenticar|sessao\s+expirada|senha\s+invalida)\b", re.I)),
+    ("cloudflare_block", re.compile(r"\b(?:cloudflare|turnstile|challenge|bloqueio|bloqueou\s+o\s+acesso)\b", re.I)),
+)
+
+_REGRESSION_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\b(?:voltou\s+a\s+(?:dar|ocorrer|acontecer|falhar|quebrar|apresentar)|de\s+novo|novamente)\b", re.I),
+    re.compile(r"\b(?:apos\s+(?:a\s+ultima\s+)?atualiza(?:cao|r)|depois\s+da\s+atualizacao|na\s+nova\s+versao|antes\s+funcionava|parou\s+novamente)\b", re.I),
+    re.compile(r"\bregressao\b", re.I),
+)
+
+_NON_SUBSTANTIVE_NOTE_RE = re.compile(
+    r"^(?:site\s+muito\s+(?:bom|otimo|legal|rapido)|por\s+favor\s+adicionem|adicionem\s+por\s+favor|obrigad[ao]|valeu|top|pfv|pls|n/a|nenhuma?|nada)\b",
+    re.I,
+)
+
+
+def normalize_language_code(raw_lang: str, *, allow_short_iso: bool = False) -> frozenset[str]:
+    """Normalize a declared or extracted language string to ISO-like lowercase codes."""
+    text = normalize_text(raw_lang, preserve_urls=False)
+    if not text:
+        return frozenset()
+    if re.search(r"\b(?:all|multi(?:lingue|idioma)?|varios|todas?|todos)\b", text):
+        return frozenset({"all"})
+    codes: set[str] = set()
+    for code, pat in _LANG_ALIASES:
+        if pat.search(text):
+            codes.add(code)
+    if allow_short_iso:
+        # Handle bare catalog ISO codes such as 'en', 'pt-br', 'es-419', 'vi', 'th', etc.
+        primary = re.split(r"[-_]", text.strip())[0]
+        if primary == "jp":
+            primary = "ja"
+        if re.fullmatch(r"[a-z]{2,3}", primary) and primary not in ("no", "nd"):
+            codes.add(primary)
+    return frozenset(codes)
+
+
+def extract_url_locale(url: NormalizedUrl | None) -> str:
+    """Extract an explicit leading locale segment from URL path (e.g. '/pt/' -> 'pt')."""
+    if not url or not url.is_valid_domain:
+        return ""
+    path = (url.normalized_path or "").strip("/").lower()
+    if not path:
+        return ""
+    first = path.split("/", 1)[0]
+    if first in ("pt", "pt-br"):
+        return "pt"
+    if first in ("en", "en-us", "en-gb"):
+        return "en"
+    if first in ("es", "es-la"):
+        return "es"
+    if first in ("ru", "ja", "jp", "ko", "zh", "fr", "it", "de"):
+        return "ja" if first == "jp" else first
+    return ""
+
+
+def extract_language_context(
+    declared_lang: str,
+    text: str,
+    url: NormalizedUrl | None = None,
+) -> tuple[str, frozenset[str], frozenset[str], frozenset[str]]:
+    """Extract (declared_code, mentioned_languages, target_languages, existing_only_languages)."""
+    declared_codes = normalize_language_code(declared_lang, allow_short_iso=True)
+    declared_code = next(iter(sorted(declared_codes)), "")
+
+    norm_text = normalize_text(text, preserve_urls=False)
+    mentioned: set[str] = set()
+    for code, pat in _LANG_ALIASES:
+        if pat.search(norm_text):
+            mentioned.add(code)
+
+    existing_only: set[str] = set()
+    for pat in _EXISTING_ONLY_LANG_PATTERNS:
+        for m in pat.finditer(norm_text):
+            existing_only.update(normalize_language_code(m.group(1)))
+
+    desired: set[str] = set()
+    for pat in _DESIRED_LANG_PATTERNS:
+        for m in pat.finditer(norm_text):
+            desired.update(normalize_language_code(m.group(1)))
+    desired -= existing_only
+
+    url_loc = extract_url_locale(url)
+    if url_loc:
+        mentioned.add(url_loc)
+
+    target: set[str] = set(desired)
+    if not target:
+        if declared_codes:
+            target.update(declared_codes)
+        elif url_loc:
+            target.add(url_loc)
+    elif declared_codes and not (declared_codes & existing_only):
+        target.update(declared_codes)
+
+    mentioned.update(target)
+    mentioned.update(existing_only)
+    return declared_code, frozenset(mentioned), frozenset(target), frozenset(existing_only)
+
+
+def detect_extension_already_exists(text: str) -> bool:
+    """Return True when free-form text indicates the extension already exists in Project Nox."""
+    norm = normalize_text(text, preserve_urls=False)
+    if not norm:
+        return False
+    return any(pat.search(norm) for pat in _ALREADY_EXISTS_PATTERNS)
+
+
+def extract_feature_and_symptom_topics(text: str) -> tuple[frozenset[str], frozenset[str]]:
+    """Extract normalized requested feature topics and concrete failure symptom topics."""
+    norm = normalize_text(text, preserve_urls=False)
+    if not norm:
+        return frozenset(), frozenset()
+    features = frozenset(name for name, pat in _FEATURE_TOPIC_PATTERNS if pat.search(norm))
+    symptoms = frozenset(name for name, pat in _SYMPTOM_TOPIC_PATTERNS if pat.search(norm))
+    return features, symptoms
+
+
+def detect_regression_signal(text: str) -> bool:
+    """Return True when report explicitly describes recurrence/post-update regression."""
+    norm = normalize_text(text, preserve_urls=False)
+    if not norm:
+        return False
+    return any(pat.search(norm) for pat in _REGRESSION_PATTERNS)
+
+
+def extract_specific_work_hint(title_symptom: str, description: str) -> str:
+    """Extract a specific manga/anime title hint when issue scopes the problem to one work."""
+    combined = normalize_text(f"{title_symptom} {description}", preserve_urls=False)
+    patterns = (
+        re.compile(r"\b(?:apenas|so|somente)\s+(?:na|no|em)\s+(?:obra|manga|anime)\s+([a-z0-9][a-z0-9\s-]{2,32}?)(?:\s+(?:da|de|esta|nao|capitulo|erro)|$)"),
+        re.compile(r"\b(?:manga|anime)\s+([a-z0-9][a-z0-9-]{2,28}(?:\s+[a-z0-9-]{2,18}){0,2})\s+(?:capitulos?\s+errados?|nao\s+carrega|trocad[oa])"),
+    )
+    for pat in patterns:
+        m = pat.search(combined)
+        if m:
+            hint = re.sub(r"\s+", " ", m.group(1)).strip()
+            if hint not in ("extensao", "fonte", "site", "leitor", "aplicativo"):
+                return hint
+    return ""
+
+
+def has_substantive_observations_text(
+    text: str,
+    *,
+    extension_already_exists: bool = False,
+    feature_topics: frozenset[str] = frozenset(),
+    symptom_topics: frozenset[str] = frozenset(),
+    existing_only_languages: frozenset[str] = frozenset(),
+    error_signatures: frozenset[str] = frozenset(),
+    category_mismatch: bool = False,
+) -> bool:
+    """Return True when observations contain concrete functional/technical divergences, not praise/background."""
+    if extension_already_exists or existing_only_languages or symptom_topics or error_signatures or category_mismatch:
+        return True
+    norm = normalize_text(text, preserve_urls=False)
+    if not norm or len(norm) < 20:
+        return False
+    if _NON_SUBSTANTIVE_NOTE_RE.match(norm) and len(norm) < 60:
+        return False
+    # Check for imperative/requirement verbs indicating actionable scope beyond background blurbs
+    return bool(
+        re.search(
+            r"\b(?:adicionar\s+suporte|precis[oa]|suporte\s+(?:a|ao|para)|apenas\s+em|somente\s+em|corrigir|consertar|incluir|implementar|faltando|nao\s+(?:exibe|mostra|tem|funciona|carrega|reproduz))\b",
+            norm,
+        )
+    )
+
+
+def infer_semantic_intent(
+    *,
+    form_category: str,
+    clean_title: str,
+    free_text: str,
+    extension_already_exists: bool,
+    error_signatures: frozenset[str],
+    feature_topics: frozenset[str],
+    symptom_topics: frozenset[str],
+    target_languages: frozenset[str],
+    existing_only_languages: frozenset[str],
+    has_old_url: bool,
+    has_new_url: bool,
+    dead_evidence: str,
+) -> tuple[str, frozenset[str], str, bool]:
+    """Infer primary semantic intent, secondary intents, inferred category, and mismatch flag."""
+    norm = normalize_text(f"{clean_title} {free_text}", preserve_urls=False)
+    secondaries: set[str] = set()
+
+    has_bug_verb = bool(
+        re.search(
+            r"\b(?:parou\s+de\s+funcionar|nao\s+funciona|quebrou|nao\s+carrega|nao\s+abre|nao\s+reproduz(?:iu|ia|em|iram)?|erro\s+(?:no|na|ao|http)|falha|no\s+pages\s+found|no\s+results\s+found|carregamento\s+infinito)\b",
+            norm,
+        )
+    )
+    has_enhancement_verb = bool(
+        re.search(
+            r"\b(?:adicionar\s+suporte|suporte\s+(?:a|ao|para)|incluir\s+(?:o|a|os|as|suporte|filtro|idioma|conteudo)|implementar|melhoria|melhorar|recurso|funcionalidade|tambem\s+consiga|acessar\s+o\s+conteudo\s+em|organiza\s+os\s+conteudos)\b",
+            norm,
+        )
+    )
+    has_create_verb = bool(
+        re.search(
+            r"\b(?:criar\s+(?:uma\s+)?extensao|nova\s+extensao|adicionar\s+(?:a\s+)?extensao|adicionar\s+(?:o\s+)?site|adicionem\s+essa\s+extensao)\b",
+            norm,
+        )
+    )
+    has_domain_cue = bool(
+        (has_old_url and has_new_url)
+        or (
+            not has_bug_verb
+            and re.search(r"\b(?:mudou\s+de\s+dominio|novo\s+dominio|mudanca\s+de\s+dominio|novo\s+endereco)\b", norm)
+        )
+    )
+    has_loading_cue = bool(
+        symptom_topics & {"no_pages_or_empty", "infinite_loading", "slow_download", "missing_content"}
+        or error_signatures & {"no_pages_found", "no_results_found", "timeout", "video_playback"}
+    )
+
+    if error_signatures or has_bug_verb:
+        secondaries.add("loading_issue" if has_loading_cue else "bug_fix")
+    if (feature_topics - {"lang_locale"}) or has_enhancement_verb:
+        secondaries.add("feature_addition")
+    if (
+        ("lang_locale" in feature_topics and (extension_already_exists or has_enhancement_verb or bool(existing_only_languages)))
+        or (existing_only_languages and target_languages and not (target_languages <= existing_only_languages))
+    ):
+        secondaries.add("language_support")
+    if "missing_content" in symptom_topics or re.search(r"\bnao\s+(?:exibe|mostra)\s+(?:o\s+)?conteudo\b", norm):
+        secondaries.add("missing_content")
+    if has_domain_cue:
+        secondaries.add("domain_change")
+
+    if form_category == "new_extension":
+        if has_domain_cue:
+            return "domain_change", frozenset(secondaries), "domain_change", True
+        if dead_evidence == "permanent" and extension_already_exists:
+            return "dead_source", frozenset(secondaries), "dead_source", True
+        if "language_support" in secondaries and (extension_already_exists or has_enhancement_verb):
+            return "language_support", frozenset(secondaries), "enhancement", True
+        if (error_signatures or has_bug_verb) and not ("missing_content" in secondaries and has_enhancement_verb) and (
+            extension_already_exists or not has_create_verb
+        ):
+            if error_signatures - {"cloudflare", "login_auth"} or has_bug_verb:
+                primary = "loading_issue" if has_loading_cue else "bug_fix"
+                return primary, frozenset(secondaries), "bug", True
+        if extension_already_exists or has_enhancement_verb:
+            if "missing_content" in secondaries and not ((feature_topics - {"lang_locale"}) and has_enhancement_verb):
+                return "missing_content", frozenset(secondaries), "enhancement", True
+            return "feature_addition", frozenset(secondaries), "enhancement", True
+        return "create_extension", frozenset(secondaries), "new_extension", False
+
+    if form_category == "bug":
+        if has_enhancement_verb and not error_signatures and not has_bug_verb:
+            primary = "language_support" if "language_support" in secondaries else "feature_addition"
+            return primary, frozenset(secondaries), "enhancement", True
+        if has_domain_cue and not has_loading_cue and not error_signatures:
+            return "domain_change", frozenset(secondaries), "domain_change", True
+        primary = "loading_issue" if has_loading_cue else "bug_fix"
+        return primary, frozenset(secondaries), "bug", False
+
+    if form_category == "domain_change":
+        if has_bug_verb and not has_new_url and not re.search(r"\bmudou\s+de\s+dominio\b|\bnovo\s+dominio\b", norm):
+            return ("loading_issue" if has_loading_cue else "bug_fix"), frozenset(secondaries), "bug", True
+        return "domain_change", frozenset(secondaries), "domain_change", False
+
+    if form_category == "dead_source":
+        if has_domain_cue and dead_evidence != "permanent":
+            return "domain_change", frozenset(secondaries), "domain_change", True
+        return "dead_source", frozenset(secondaries), "dead_source", False
+
+    if form_category == "enhancement":
+        if has_create_verb and not extension_already_exists and not (feature_topics - {"nsfw_adult"}):
+            return "create_extension", frozenset(secondaries), "new_extension", True
+        if (error_signatures or has_bug_verb) and not has_enhancement_verb:
+            return ("loading_issue" if has_loading_cue else "bug_fix"), frozenset(secondaries), "bug", True
+        if "language_support" in secondaries and not (feature_topics - {"lang_locale"}):
+            return "language_support", frozenset(secondaries), "enhancement", False
+        return "feature_addition", frozenset(secondaries), "enhancement", False
+
+    return "create_extension" if has_create_verb else "bug_fix", frozenset(secondaries), form_category, False

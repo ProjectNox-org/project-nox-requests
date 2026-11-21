@@ -357,6 +357,32 @@
       }
     },
     {
+      "number": 46,
+      "title": "[Bug]: HTTP 522, verifique o site na WebView Cerise Scan",
+      "body": "### Tipo\n\nMangá\n\n### Nome da extensão\n\nCerise Scan\n\n### Versão\n\n1.4.64\n\n### URL do site\n\nhttps://loverstoon.net/\n\n### O que está quebrado?\n\n- [ ] Popular\n- [ ] Recentes\n- [ ] Busca\n- [ ] Filtros\n- [ ] Detalhes\n- [ ] Capítulos/Episódios\n- [ ] Leitor/Vídeo\n- [ ] Login\n- [x] Outro\n\n### Quando começou, se souber\n\n_No response_\n\n### O site funciona normalmente no navegador?\n\nNão\n\n### Precisa de login?\n\nNão\n\n### Precisa de VIP/Premium?\n\nNão\n\n### Mensagem de erro\n\nHTTP 522, verifique o site na WebView, quando entro no WebView aparece o erro da foto, mas os outros que precisam do cloudflare funcionam. \n\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/2289121e-5068-40fb-b6bc-f1b83244d7a8\" />\n\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/42c1bc54-d2dd-4536-b251-064f495173fd\" />\n\n\n### Informações adicionais\n\n_No response_",
+      "state": "closed",
+      "state_reason": "completed",
+      "created_at": "2026-09-23T18:52:31Z",
+      "updated_at": "2026-09-23T19:18:44Z",
+      "closed_at": "2026-09-23T19:18:37Z",
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/46",
+      "labels": [
+        {
+          "name": "Problema na extensão"
+        },
+        {
+          "name": "Mangá"
+        },
+        {
+          "name": "Concluído"
+        }
+      ],
+      "user": {
+        "login": "community-user"
+      },
+      "comments": 1
+    },
+    {
       "number": 50,
       "title": "[Bug]: Erro Leitor mudou XXX YAOI",
       "body": "### Tipo\n\nMangá\n\n### Nome da extensão\n\nXXX YAOI \n\n### Versão\n\n1.6.63\n\n### URL do site\n\nhttps://3xyaoi.com/\n\n### O que está quebrado?\n\n- [ ] Popular\n- [ ] Recentes\n- [ ] Busca\n- [ ] Filtros\n- [ ] Detalhes\n- [x] Capítulos/Episódios\n- [x] Leitor/Vídeo\n- [ ] Login\n- [ ] Outro\n\n### Quando começou, se souber\n\nJá abri dois chamados anteriores sobre esse assunto resolvi dar um tempo para ver se voltaria a funcionar a Scan, porém continua com o mesmo erro dizendo que o \"\n\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/df1ea5c8-2036-4910-a8d4-c97a5bc4a0c9\" />\n\nleitor mudou\"\n\n### O site funciona normalmente no navegador?\n\nSim\n\n### Precisa de login?\n\nNão\n\n### Precisa de VIP/Premium?\n\nNão\n\n### Mensagem de erro\n\nNão consigo copiar a mensagem de erro pois ela aparece muito rápido e some, so tenho o print.\n\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/969ca8a4-0af2-41d3-9fde-1575096072e2\" />\n\n### Informações adicionais\n\nEu pensei que fosse ter que entrar com longin e senha, porém não resolveu.\nTentei mudar as configurações DNS o HTTPS mas não resolveu, mudei o user agent e nada também tirei a scan e voltei e o erro permanece, pensei que fosse a Extensão então voltei pra anterior o erro permaneceu da mesma forma, voltei para a project Nox.\n\nA versão do mihon está em 0.20.4 e meu celular é o Galaxy A15.\n\nAviso importante, tudo que eu testei eu voltei ao normal da forma que estava antes, a única coisa que não testei foi desinstalar o aplicativo e tentar novamente, pois não quero perder o registro das obras que estou acompanhando e as que eu tenho salva que terminei.\n\nI scan ela funciona normalmente na website, porém a partir de uma certa quantidade de capítulos que você lê, ele dá meio que uma travada e volta a funcionar depois.\n\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/1b990c5c-267e-4528-8fa2-023a85ddbdcc\" />\n\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/60449c48-fcba-4356-9dfe-81a0a7b29f0c\" />\n\n<img width=\"1080\" height=\"2340\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/1bfbb0ff-32c9-4385-9eeb-8c0b85f12bca\" />",
@@ -1076,6 +1102,35 @@
       }
     },
     {
+      "number": 141,
+      "title": "[Nova extensão]: hentaihaven",
+      "body": "### Tipo de extensão\n\nAnime\n\n### Nome da fonte\n\nhentaihaven\n\n### URL do site\n\nhttps://hentaihaven.xxx/\n\n### Idioma\n\nPortuguês (Brasil)\n\n### Precisa de login?\n\nNão\n\n### Precisa de VIP/Premium?\n\nNão\n\n### Conteúdo +18?\n\nSim\n\n### Observações (opcional)\n\n_No response_",
+      "state": "closed",
+      "state_reason": "completed",
+      "created_at": "2026-11-10T02:08:15Z",
+      "updated_at": "2026-11-12T15:15:42Z",
+      "closed_at": "2026-11-12T15:15:42Z",
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/141",
+      "labels": [
+        {
+          "name": "Anime"
+        },
+        {
+          "name": "Nova extensão"
+        },
+        {
+          "name": "Em análise"
+        },
+        {
+          "name": "Conteúdo +18"
+        }
+      ],
+      "user": {
+        "login": "community-user"
+      },
+      "comments": 0
+    },
+    {
       "number": 142,
       "title": "[Nova extensão]: watchanimehentai",
       "body": "### Tipo de extensão\n\nAnime\n\n### Nome da fonte\n\nwatchanimehentai\n\n### URL do site\n\nhttps://www.watchanimehentai.com/pt/\n\n### Idioma\n\nPortuguês (Brasil)\n\n### Precisa de login?\n\nNão\n\n### Precisa de VIP/Premium?\n\nNão\n\n### Conteúdo +18?\n\nSim\n\n### Observações (opcional)\n\nEla parece ser muito boa. Não cheguei a usar muito, mas pelo menos quem usa costuma elogiar. Além disso, pelo que vi, ela é uma espécie de ressurreição do antigo Hentai Tube, um site que era bastante popular, mas acabou saindo do ar do nada. Pelo visto, os administradores decidiram trazê-lo de volta.\n<img width=\"1080\" height=\"2400\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/46f64ba2-5052-49be-8188-e3222d86637a\" />",
@@ -1308,6 +1363,32 @@
       "user": {
         "login": "eusouoscar"
       }
+    },
+    {
+      "number": 152,
+      "title": "[Problema na extensão]: Cerise scan — Cerise scan reformulou o site",
+      "body": "### Tipo de extensão\n\nMangá\n\n### Nome da extensão\n\nCerise scan \n\n### Versão da extensão\n\n1.6.65\n\n### Aplicativo utilizado\n\nMihon \n\n### Parte afetada\n\nCapítulos\n\n### O que está acontecendo?\n\n<img width=\"1080\" height=\"2340\" alt=\"Screenshot_20261115-105222_Brave\" src=\"https://github.com/user-attachments/assets/7a9ae48c-b598-4704-988c-685eac022cb3\" />\n<img width=\"1080\" height=\"2340\" alt=\"Screenshot_20261115-105228_Brave\" src=\"https://github.com/user-attachments/assets/14f3cfec-fbe5-4bb2-9464-8620a5291623\" />\n\nExtension name: Cerise Scan (lang: pt-BR; package: eu.kanade.tachiyomi.extension.pt.cerisescans)\nExtension version: 1.6.65 (lib: 1.6; version code: 106065)\nContent warning: MIXED\n\nUpdate available: false\nOrphaned: false\nShared: true\nRepository: https://raw.githubusercontent.com/Awerkori/extensoes/repo/index.pb\n\n### Como reproduzir?\n\n<img width=\"1080\" height=\"2340\" alt=\"Screenshot_20261115-105413_Mihon\" src=\"https://github.com/user-attachments/assets/4e838ed4-3bf0-4a6b-b187-84b8394a2a14\" />\n\nCapítulo não encontrado\n\n### Informações complementares (opcional)\n\nhttps://loverstoon.net/",
+      "state": "closed",
+      "state_reason": "completed",
+      "created_at": "2026-11-15T13:55:43Z",
+      "updated_at": "2026-11-19T01:06:30Z",
+      "closed_at": "2026-11-19T00:55:23Z",
+      "html_url": "https://github.com/ProjectNox-org/project-nox-requests/issues/152",
+      "labels": [
+        {
+          "name": "Problema na extensão"
+        },
+        {
+          "name": "Mangá"
+        },
+        {
+          "name": "Em análise"
+        }
+      ],
+      "user": {
+        "login": "community-user"
+      },
+      "comments": 2
     },
     {
       "number": 153,

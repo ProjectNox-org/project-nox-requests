@@ -268,6 +268,33 @@ def build_labeled_cases():
         ("real_cross_123_126", "new_extension", real[123], real[126], False, False),
         ("real_cross_126_140", "new_extension", real[126], real[140], False, False),
         ("real_cross_140_143", "new_extension", real[140], real[143], False, False),
+        # Semantic & regression protection cases
+        ("real_semantic_141_143_closed", "new_extension", real[141], real[143], False, False),
+        (
+            "real_semantic_141_143_simulated_open", "new_extension",
+            _mk(141, real[141].title, real[141].body, ["Nova extensão", "Anime", "Conteúdo +18"], state="open", created_at=real[141].created_at),
+            real[143], False, False,
+        ),
+        ("real_reg_63_111_little_tyrant", "bug", real[63], real[111], False, False),
+        ("real_reg_46_152_cerise_scan", "bug", real[46], real[152], False, False),
+        (
+            "semantic_same_site_diff_lang_en_pt", "new_extension",
+            _mk(6001, "[Nova extensão]: DualExt", "### Tipo de extensão\nMangá\n### Nome da fonte\nDualExt\n### URL do site\nhttps://dualext.com/en/\n### Idioma\nInglês\n", ["Nova extensão", "Mangá"]),
+            _mk(6002, "[Nova extensão]: DualExt", "### Tipo de extensão\nMangá\n### Nome da fonte\nDualExt\n### URL do site\nhttps://dualext.com/pt/\n### Idioma\nPortuguês (Brasil)\n", ["Nova extensão", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            False, False,
+        ),
+        (
+            "semantic_same_site_diff_features", "enhancement",
+            _mk(6003, "[Sugestão]: Suki — Login", "### Título ou resumo\nSuporte a login na Suki\n### Descrição da melhoria\nImplementar cadastro e login de usuário.\n### Extensão relacionada (opcional)\nSuki\n", ["Sugestão"]),
+            _mk(6004, "[Sugestão]: Suki — Filtro por gênero", "### Título ou resumo\nFiltro por gênero na Suki\n### Descrição da melhoria\nAdicionar filtro por gênero e ano na busca.\n### Extensão relacionada (opcional)\nSuki\n", ["Sugestão"], created_at="2026-11-02T10:00:00Z"),
+            False, False,
+        ),
+        (
+            "bug_diff_symptom_wrong_chapters_vs_no_pages", "bug",
+            _mk(6005, "[Problema na extensão]: FonteY — Capítulos errados", "### Tipo de extensão\nMangá\n### Nome da extensão\nFonteY\n### Parte afetada\nCapítulos\n### O que está acontecendo?\nCapítulos trocados de outra obra e fora de ordem.\n", ["Problema na extensão", "Mangá"]),
+            _mk(6006, "[Problema na extensão]: FonteY — Nenhuma página", "### Tipo de extensão\nMangá\n### Nome da extensão\nFonteY\n### Parte afetada\nCapítulos\n### O que está acontecendo?\nErro No pages found ao abrir capítulo.\n", ["Problema na extensão", "Mangá"], created_at="2026-11-02T10:00:00Z"),
+            False, False,
+        ),
     ]
     return cases
 

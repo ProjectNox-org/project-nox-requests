@@ -15,16 +15,27 @@ from .models import (
     CATEGORY_ENHANCEMENT,
     CATEGORY_NEW_EXTENSION,
     CATEGORY_UNKNOWN,
+    CatalogExtension,
+    ExtensionCatalog,
     ParsedIssue,
     RawIssue,
 )
 from .normalize import (
+    classify_dead_source_evidence,
     compact_name,
+    detect_extension_already_exists,
+    detect_regression_signal,
     distinctive_name_tokens,
     extract_error_signatures,
+    extract_feature_and_symptom_topics,
+    extract_language_context,
+    extract_specific_work_hint,
     extract_urls_from_text,
+    has_substantive_observations_text,
+    infer_semantic_intent,
     is_sparse_description,
     name_without_tld,
+    normalize_language_code,
     normalize_text,
     normalize_url,
     parse_version,
@@ -359,7 +370,6 @@ def parse_issue(raw: RawIssue, known_extensions: frozenset[str] = frozenset()) -
     related_ext = ""
     if category == CATEGORY_ENHANCEMENT:
         related_ext = _infer_related_extension_for_enhancement(sections, clean_title, summary, known_extensions)
-    related_ext_compact = compact_name(related_ext)
 
     # Remove extension name prefix from clean_title for text comparison in bugs
     title_symptom = clean_title
@@ -367,8 +377,52 @@ def parse_issue(raw: RawIssue, known_extensions: frozenset[str] = frozenset()) -
         title_symptom = re.sub(rf"^{re.escape(name)}\s*[-—:,]\s*", "", title_symptom, flags=re.IGNORECASE).strip()
 
     combined_symptom_text = "\n".join(p for p in (title_symptom, description, reproduction, additional_info) if p)
+    free_intent_text = "\n".join(
+        p for p in (title_symptom, sections.get("summary", ""), sections.get("description", ""), reproduction, additional_info) if p
+    )
     error_sigs, tech_tokens = extract_error_signatures(combined_symptom_text)
     all_text_tokens = tokenize(combined_symptom_text)
+
+    declared_code, mentioned_langs, target_langs, existing_only_langs = extract_language_context(
+        sections.get("lang", ""),
+        free_intent_text,
+        url_obj,
+    )
+    ext_already_exists = detect_extension_already_exists(free_intent_text)
+    feature_topics, symptom_topics = extract_feature_and_symptom_topics(free_intent_text)
+    has_reg_signal = detect_regression_signal(free_intent_text)
+    specific_work_hint = extract_specific_work_hint(title_symptom, description)
+    dead_ev = classify_dead_source_evidence(free_intent_text)
+
+    semantic_intent, secondary_intents, inferred_cat, cat_mismatch = infer_semantic_intent(
+        form_category=category,
+        clean_title=clean_title,
+        free_text=free_intent_text,
+        extension_already_exists=ext_already_exists,
+        error_signatures=error_sigs,
+        feature_topics=feature_topics,
+        symptom_topics=symptom_topics,
+        target_languages=target_langs,
+        existing_only_languages=existing_only_langs,
+        has_old_url=bool(old_url_obj),
+        has_new_url=bool(new_url_obj),
+        dead_evidence=dead_ev,
+    )
+
+    obs_only_text = "\n".join(p for p in (sections.get("notes", ""), sections.get("description", ""), sections.get("additional_info", "")) if p)
+    has_obs = has_substantive_observations_text(
+        obs_only_text,
+        extension_already_exists=ext_already_exists,
+        feature_topics=feature_topics,
+        symptom_topics=symptom_topics,
+        existing_only_languages=existing_only_langs,
+        error_signatures=error_sigs,
+        category_mismatch=cat_mismatch,
+    )
+
+    if not related_ext and inferred_cat == CATEGORY_ENHANCEMENT:
+        related_ext = name or _infer_related_extension_for_enhancement(sections, clean_title, summary, known_extensions)
+    related_ext_compact = compact_name(related_ext)
 
     resolution, active_status, is_dup_marked = _detect_resolution_and_status(raw)
     is_open = raw.state == "open"
@@ -376,16 +430,21 @@ def parse_issue(raw: RawIssue, known_extensions: frozenset[str] = frozenset()) -
 
     sparse = is_sparse_description(description, f"{title_symptom} {additional_info}") and not error_sigs
 
-    # Deterministic structured fingerprint
+    # Deterministic structured fingerprint (includes notes & semantic intent so observation edits re-evaluate)
     fp_parts = [
         category,
+        inferred_cat,
+        semantic_intent,
         ext_type or "",
         compact,
         url_obj.identity_key if url_obj else "",
         old_url_obj.identity_key if old_url_obj else "",
         new_url_obj.identity_key if new_url_obj else "",
+        declared_code,
+        ",".join(sorted(target_langs)),
+        ",".join(sorted(existing_only_langs)),
         ",".join(sorted(affected_parts)),
-        normalize_text(f"{title_symptom} {description}", preserve_urls=True),
+        normalize_text(f"{title_symptom} {description} {additional_info}", preserve_urls=True),
         related_ext_compact,
     ]
     fp_hash = hashlib.sha256("|".join(fp_parts).encode("utf-8")).hexdigest()[:16]
@@ -421,4 +480,81 @@ def parse_issue(raw: RawIssue, known_extensions: frozenset[str] = frozenset()) -
         is_duplicate_marked=is_dup_marked,
         content_fingerprint=fp_hash,
         body_is_sparse=sparse,
+        declared_language=declared_code,
+        semantic_intent=semantic_intent,
+        secondary_intents=secondary_intents,
+        inferred_category=inferred_cat,
+        category_mismatch=cat_mismatch,
+        extension_already_exists=ext_already_exists,
+        mentioned_languages=mentioned_langs,
+        target_languages=target_langs,
+        existing_only_languages=existing_only_langs,
+        feature_topics=feature_topics,
+        symptom_topics=symptom_topics,
+        has_substantive_observations=has_obs,
+        has_regression_signal=has_reg_signal,
+        specific_work_hint=specific_work_hint,
     )
+
+
+_CATALOG_PREFIX_RE = re.compile(r"^(?:aniyomi|tachiyomi|mihon)\s*:\s*", re.IGNORECASE)
+
+
+def parse_catalog_entries(raw_entries: list[dict], ext_type: str, catalog_repo: str) -> list[CatalogExtension]:
+    """Parse entries from a Project Nox index.min.json catalog into normalized CatalogExtension models."""
+    parsed: list[CatalogExtension] = []
+    for entry in raw_entries:
+        if not isinstance(entry, dict):
+            continue
+        raw_name = str(entry.get("name") or "").strip()
+        clean_name = _CATALOG_PREFIX_RE.sub("", raw_name).strip()
+        if not clean_name:
+            continue
+        langs: set[str] = set()
+        langs.update(normalize_language_code(str(entry.get("lang") or ""), allow_short_iso=True))
+        domains: set[str] = set()
+        base_urls: list[str] = []
+        for src in entry.get("sources") or ():
+            if not isinstance(src, dict):
+                continue
+            langs.update(normalize_language_code(str(src.get("lang") or ""), allow_short_iso=True))
+            raw_base = str(src.get("baseUrl") or "").strip()
+            for candidate_u in re.split(r"[\s,]+", raw_base):
+                if not candidate_u:
+                    continue
+                u_obj = normalize_url(candidate_u)
+                if u_obj and u_obj.is_valid_domain:
+                    domains.add(u_obj.identity_key)
+                    if candidate_u not in base_urls:
+                        base_urls.append(candidate_u)
+        version_str = str(entry.get("version") or "").strip()
+        parsed.append(
+            CatalogExtension(
+                ext_type=ext_type,
+                name=clean_name,
+                compact_name=compact_name(clean_name) or name_without_tld(clean_name),
+                pkg=str(entry.get("pkg") or "").strip(),
+                apk=str(entry.get("apk") or "").strip(),
+                version=version_str,
+                version_tuple=parse_version(version_str),
+                languages=frozenset(langs),
+                domains=frozenset(domains),
+                base_urls=tuple(base_urls),
+                catalog_repo=catalog_repo,
+            )
+        )
+    return parsed
+
+
+def build_extension_catalog(catalog_payloads: dict[str, list[dict]] | None) -> ExtensionCatalog:
+    """Build an ExtensionCatalog from {'manga': [...], 'anime': [...]} raw payloads."""
+    if not isinstance(catalog_payloads, dict):
+        return ExtensionCatalog()
+    extensions: list[CatalogExtension] = []
+    manga_rows = catalog_payloads.get("manga") or catalog_payloads.get("Mangá") or []
+    anime_rows = catalog_payloads.get("anime") or catalog_payloads.get("Anime") or []
+    if isinstance(manga_rows, list):
+        extensions.extend(parse_catalog_entries(manga_rows, "Mangá", "ProjectNox-org/manga-extensoes"))
+    if isinstance(anime_rows, list):
+        extensions.extend(parse_catalog_entries(anime_rows, "Anime", "ProjectNox-org/anime-extensoes"))
+    return ExtensionCatalog(extensions)

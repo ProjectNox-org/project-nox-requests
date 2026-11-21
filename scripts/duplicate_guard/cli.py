@@ -17,8 +17,17 @@ from .actions import GuardActionExecutor
 from .config import DEFAULT_CONFIG_PATH, load_config
 from .github_client import GitHubApiError, GitHubClient, PermissionDeniedError, RateLimitError
 from .matcher import DuplicateMatcher, extract_canonical_reference
-from .models import LABEL_DUPLICATE, RULE_ENGINE_VERSION, GuardConfig, ParsedIssue, RawIssue
-from .parser import parse_issue
+from .models import (
+    INCOMPATIBLE_STATUS_LABELS_ON_DUPLICATE,
+    LABEL_DUPLICATE,
+    OFFICIAL_RESOLUTION_LABELS,
+    RULE_ENGINE_VERSION,
+    ExtensionCatalog,
+    GuardConfig,
+    ParsedIssue,
+    RawIssue,
+)
+from .parser import build_extension_catalog, parse_issue
 
 TERMINAL_CACHE_ACTIONS = frozenset({
     "noop",
@@ -53,6 +62,49 @@ def _collect_known_extensions(raw_issues: list[RawIssue]) -> frozenset[str]:
         if parsed.related_extension_compact and len(parsed.related_extension_compact) >= 4:
             known.add(parsed.related_extension_compact)
     return frozenset(known)
+
+
+def _needs_closed_duplicate_label_cleanup(p: ParsedIssue) -> bool:
+    if not p.is_closed:
+        return False
+    is_dup_closed = (p.raw.state_reason == "duplicate") or (LABEL_DUPLICATE in p.raw.labels)
+    if not is_dup_closed:
+        return False
+    has_any_resolution = bool(set(p.raw.labels) & OFFICIAL_RESOLUTION_LABELS)
+    missing_dup = (not has_any_resolution) and (LABEL_DUPLICATE not in p.raw.labels)
+    has_stale_status = bool(set(p.raw.labels) & set(INCOMPATIBLE_STATUS_LABELS_ON_DUPLICATE))
+    return missing_dup or has_stale_status
+
+
+def load_extension_catalog(
+    client: object | None,
+    cache_state: dict | None = None,
+    *,
+    ttl_seconds: int = 21600,
+) -> ExtensionCatalog:
+    """Load official manga/anime extension catalogs with 6-hour incremental cache."""
+    if client is None or not hasattr(client, "list_catalog_extensions"):
+        return ExtensionCatalog()
+    now_ts = datetime.now(tz=timezone.utc)
+    if isinstance(cache_state, dict):
+        cached = cache_state.get("catalog")
+        if isinstance(cached, dict) and isinstance(cached.get("payload"), dict):
+            fetched_at = _parse_iso(str(cached.get("fetched_at") or ""))
+            if (now_ts - fetched_at).total_seconds() < ttl_seconds:
+                return build_extension_catalog(cached["payload"])
+    try:
+        payload = client.list_catalog_extensions()  # type: ignore[attr-defined]
+    except RateLimitError:
+        if isinstance(cache_state, dict) and isinstance(cache_state.get("catalog"), dict):
+            prev = cache_state["catalog"].get("payload")
+            if isinstance(prev, dict):
+                return build_extension_catalog(prev)
+        raise
+    except GitHubApiError:
+        return ExtensionCatalog()
+    if isinstance(cache_state, dict) and isinstance(payload, dict):
+        cache_state["catalog"] = {"fetched_at": now_ts.isoformat(), "payload": payload}
+    return build_extension_catalog(payload)
 
 
 def parse_corpus(raw_issues: list[RawIssue]) -> list[ParsedIssue]:
@@ -135,6 +187,7 @@ def _load_cache(cache_path: Path) -> dict:
         "last_full_backfill_at": None,
         "evaluated": {},
         "dup_links": {},
+        "catalog": {},
     }
     if not cache_path.exists():
         return empty
@@ -146,11 +199,13 @@ def _load_cache(cache_path: Path) -> dict:
             return empty
         evaluated = loaded.get("evaluated")
         dup_links = loaded.get("dup_links")
+        catalog = loaded.get("catalog")
         return {
             "rule_version": RULE_ENGINE_VERSION,
             "last_full_backfill_at": loaded.get("last_full_backfill_at"),
             "evaluated": evaluated if isinstance(evaluated, dict) else {},
             "dup_links": dup_links if isinstance(dup_links, dict) else {},
+            "catalog": catalog if isinstance(catalog, dict) else {},
         }
     except Exception:
         return empty
@@ -365,11 +420,12 @@ def run_cli(argv: list[str] | None = None, *, client_override: object | None = N
     parsed_by_num = {p.raw.number: p for p in parsed_list}
     try:
         dup_links = build_duplicate_links(raw_issues, client, cache_state=cache_state)
+        catalog = load_extension_catalog(client, cache_state=cache_state)
     except (RateLimitError, PermissionDeniedError, GitHubApiError) as exc:
         if can_persist_cache:
             _save_cache(cache_path, cache_state)
         return _abort_api_error(args, exc, args.summary_file)
-    matcher = DuplicateMatcher(parsed_list, config, duplicate_links=dup_links)
+    matcher = DuplicateMatcher(parsed_list, config, duplicate_links=dup_links, catalog=catalog)
 
     effective_mode = args.mode
     if effective_mode == "reconcile" and not cache_state.get("last_full_backfill_at"):
@@ -395,12 +451,15 @@ def run_cli(argv: list[str] | None = None, *, client_override: object | None = N
             target_numbers.append(issue_num)
     elif effective_mode == "backfill":
         for p in sorted(parsed_list, key=lambda x: (_parse_iso(x.raw.created_at), x.raw.number)):
-            if p.is_open:
+            if p.is_open or _needs_closed_duplicate_label_cleanup(p):
                 target_numbers.append(p.raw.number)
     else:
         lookback = args.lookback_days if args.lookback_days is not None else config.reconcile_lookback_days
         cutoff = datetime.now(tz=timezone.utc) - timedelta(days=max(1, lookback))
         for p in sorted(parsed_list, key=lambda x: (_parse_iso(x.raw.created_at), x.raw.number)):
+            if _needs_closed_duplicate_label_cleanup(p):
+                target_numbers.append(p.raw.number)
+                continue
             if not p.is_open:
                 continue
             cached_entry = cache_state["evaluated"].get(str(p.raw.number))
@@ -412,7 +471,7 @@ def run_cli(argv: list[str] | None = None, *, client_override: object | None = N
                 target_numbers.append(p.raw.number)
 
     report_rows: list[dict] = []
-    executor = GuardActionExecutor(client, config, issues_by_num) if client is not None else None  # type: ignore[arg-type]
+    executor = GuardActionExecutor(client, config, issues_by_num, repo=args.repo) if client is not None else None  # type: ignore[arg-type]
 
     processed_api_batch = 0
     skipped_cached_count = 0

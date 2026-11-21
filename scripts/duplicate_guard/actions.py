@@ -13,8 +13,11 @@ from .github_client import GitHubApiError, PermissionDeniedError, RateLimitError
 from .models import (
     HUMAN_INTERVENTION_LABELS,
     INCOMPATIBLE_STATUS_LABELS_ON_DUPLICATE,
+    LABEL_DONE,
     LABEL_DUPLICATE,
     MAINTAINER_OVERRIDE_LABELS,
+    OFFICIAL_CATEGORY_LABELS,
+    OFFICIAL_RESOLUTION_LABELS,
     TRUSTED_AUTHOR_ASSOCIATIONS,
     TRUSTED_BOT_LOGINS,
     ActionResult,
@@ -139,10 +142,18 @@ def has_manual_ignore_override(
     return False
 
 
+def _issue_url(issue_number: int, issues_by_number: dict[int, RawIssue], repo: str) -> str:
+    raw = issues_by_number.get(issue_number)
+    if raw and raw.html_url and raw.html_url.startswith("https://"):
+        return raw.html_url
+    return f"https://github.com/{repo}/issues/{issue_number}"
+
+
 def render_comment_body(
     decision: GuardDecision,
     action: str,
     issues_by_number: dict[int, RawIssue],
+    repo: str = "ProjectNox-org/project-nox-requests",
 ) -> str:
     """Render polite, transparent, injection-safe Markdown comment in Portuguese."""
     marker = build_marker(
@@ -154,66 +165,126 @@ def render_comment_body(
     )
 
     if decision.classification == "no_match":
+        details = ""
+        if decision.reasons and decision.match_kind == "distinct_objective":
+            details = "\n\n**Análise semântica:**\n" + "\n".join(
+                f"- {sanitize_for_markdown(r, 220)}" for r in decision.reasons[:2]
+            )
         return (
             f"{marker}\n"
-            "Olá! Após a atualização desta solicitação, o **Nox Duplicate Guard** não identificou "
-            "nenhuma correspondência duplicada pendente.\n\n"
-            "Esta solicitação seguirá normalmente para triagem da equipe."
+            "Olá! Após a avaliação semântica atualizada desta solicitação, o **Nox Duplicate Guard** identificou "
+            "que este pedido **não é duplicata** para fechamento automático e permanece **aberto** para triagem normal da equipe."
+            f"{details}"
         )
 
-    if decision.classification == "confirmed_duplicate" and action == "auto_closed" and decision.canonical_issue:
-        canon_num = decision.canonical_issue
-        canon_raw = issues_by_number.get(canon_num)
-        canon_title = sanitize_for_markdown(canon_raw.title if canon_raw else f"Issue #{canon_num}", 110)
-        reasons_lines = "\n".join(f"- {sanitize_for_markdown(r, 180)}" for r in decision.reasons[:3])
-        return (
-            f"{marker}\n"
-            "Olá! O **Nox Duplicate Guard** identificou com alta confiança que esta solicitação é "
-            "duplicada de um ticket já existente e realizou o encerramento formal automático.\n\n"
-            f"**Ticket original:** #{canon_num} — {canon_title}\n\n"
-            f"**Critérios identificados:**\n{reasons_lines}\n\n"
-            f"Acompanhe o andamento pelo ticket #{canon_num} e adicione sua reação 👍 na primeira mensagem "
-            "para ajudar na priorização.\n\n"
-            "Se este encerramento automático tiver sido um engano e o problema for diferente, responda "
-            "com mais detalhes técnicos ou solicite reabertura à equipe."
-        )
+    if decision.classification == "confirmed_duplicate" and action == "auto_closed":
+        reasons_lines = "\n".join(f"- {sanitize_for_markdown(r, 220)}" for r in decision.reasons[:3])
+        if decision.match_kind == "already_fulfilled_creation" and decision.catalog_extension:
+            cat = decision.catalog_extension
+            ext_name = sanitize_for_markdown(cat.get("name") or "extensão", 100)
+            pkg = sanitize_for_markdown(cat.get("pkg") or "", 100)
+            ver = sanitize_for_markdown(cat.get("version") or "", 30)
+            langs = ", ".join(cat.get("languages") or []) or "N/D"
+            cat_repo = cat.get("catalog_repo") or "ProjectNox-org/manga-extensoes"
+            cat_url = f"https://github.com/{cat_repo}"
+            lines = [
+                marker,
+                "Olá! O **Nox Duplicate Guard** verificou que a extensão solicitada **já existe no catálogo oficial do Project Nox** e este pedido de criação já foi atendido.",
+                "",
+                f"**Extensão publicada:** {ext_name} (`{pkg}`" + (f" · v{ver}" if ver else "") + f") · **Idioma(s):** {langs}",
+                f"**Repositório oficial:** {cat_url}",
+            ]
+            if decision.canonical_issue:
+                canon_num = decision.canonical_issue
+                canon_url = _issue_url(canon_num, issues_by_number, repo)
+                canon_raw = issues_by_number.get(canon_num)
+                canon_title = sanitize_for_markdown(canon_raw.title if canon_raw else f"Issue #{canon_num}", 110)
+                lines.append(f"**Ticket original:** [#{canon_num}]({canon_url}) — {canon_title}")
+            lines.extend([
+                "",
+                f"**Critérios identificados:**\n{reasons_lines}",
+                "",
+                "Se a extensão existente apresentar algum erro, mudança de domínio ou precisar de suporte a outro idioma/funcionalidade, "
+                "abra uma solicitação usando o formulário específico (**Problema na extensão** ou **Sugestão de melhoria**), ou responda explicando a necessidade.",
+            ])
+            return "\n".join(lines)
+
+        if decision.canonical_issue:
+            canon_num = decision.canonical_issue
+            canon_url = _issue_url(canon_num, issues_by_number, repo)
+            canon_raw = issues_by_number.get(canon_num)
+            canon_title = sanitize_for_markdown(canon_raw.title if canon_raw else f"Issue #{canon_num}", 110)
+            return (
+                f"{marker}\n"
+                "Olá! O **Nox Duplicate Guard** identificou com alta confiança que esta solicitação é "
+                "duplicada equivalente de um ticket já existente e realizou o encerramento formal automático.\n\n"
+                f"**Ticket original:** [#{canon_num}]({canon_url}) — {canon_title}\n\n"
+                f"**Por que são equivalentes:**\n{reasons_lines}\n\n"
+                f"Acompanhe o andamento pelo ticket [#{canon_num}]({canon_url}) e adicione sua reação 👍 na primeira mensagem "
+                "para ajudar na priorização.\n\n"
+                "Se este encerramento automático tiver sido um engano ou tratar de um problema/objetivo diferente, responda "
+                "com mais detalhes técnicos ou solicite reabertura à equipe."
+            )
 
     # Possible duplicate (or confirmed duplicate when auto-close is disabled/blocked)
     canon_num = decision.canonical_issue
     lines = [
         marker,
-        "Olá! O **Nox Duplicate Guard** encontrou solicitação(ões) que podem estar relacionadas a este ticket.",
+        "Olá! O **Nox Duplicate Guard** encontrou solicitação(ões) relacionadas, mas manteve este ticket **aberto** para avaliação segura.",
         "",
     ]
     if canon_num is not None:
+        canon_url = _issue_url(canon_num, issues_by_number, repo)
         title_hint = ""
         canon_raw = issues_by_number.get(canon_num)
         if canon_raw:
             title_hint = f" — {sanitize_for_markdown(canon_raw.title, 100)}"
-        lines.append(f"**Possível ticket original:** #{canon_num}{title_hint}")
+        lines.append(f"**Ticket relacionado:** [#{canon_num}]({canon_url}){title_hint}")
         lines.append("")
 
-    if decision.classification == "confirmed_duplicate" and decision.reasons:
-        lines.append("**Critérios identificados:**")
+    if decision.reasons:
+        lines.append("**Motivo da associação:**")
         for r in decision.reasons[:3]:
-            lines.append(f"- {sanitize_for_markdown(r, 180)}")
+            lines.append(f"- {sanitize_for_markdown(r, 200)}")
         lines.append("")
 
+    if decision.category_mismatch and decision.inferred_category in OFFICIAL_CATEGORY_LABELS:
+        form_label = OFFICIAL_CATEGORY_LABELS[decision.inferred_category]
+        lines.append(
+            f"> **Observação de formulário:** o conteúdo da solicitação indica objetivo compatível com **{form_label}**. "
+            "Este ticket não foi tratado como duplicata simples e permanece aberto para triagem."
+        )
+        lines.append("")
+
+    all_closed_candidates = False
     if decision.candidates:
         lines.append("**Tickets relacionados:**")
+        open_states: list[bool] = []
         for cand in decision.candidates:
+            open_states.append(cand.candidate_is_open)
+            cand_url = _issue_url(cand.canonical_number, issues_by_number, repo)
             raw_cand = issues_by_number.get(cand.canonical_number)
             safe_title = sanitize_for_markdown(raw_cand.title if raw_cand else f"Issue #{cand.canonical_number}", 100)
             state_badge = "Aberta" if cand.candidate_is_open else "Fechada"
-            reason = sanitize_for_markdown(cand.reasons[0] if cand.reasons else "", 140)
-            lines.append(f"- #{cand.canonical_number} ({state_badge}) — {safe_title}" + (f" · _{reason}_" if reason else ""))
+            reason = sanitize_for_markdown(cand.reasons[0] if cand.reasons else "", 160)
+            lines.append(f"- [#{cand.canonical_number}]({cand_url}) ({state_badge}) — {safe_title}" + (f" · _{reason}_" if reason else ""))
         lines.append("")
+        all_closed_candidates = bool(open_states) and not any(open_states)
+    elif canon_num is not None and canon_num in issues_by_number:
+        all_closed_candidates = issues_by_number[canon_num].state == "closed"
 
-    lines.extend([
-        "Verifique se o problema é o mesmo. Caso seja, acompanhe a solicitação existente e adicione sua reação 👍 para apoiar a priorização.",
-        "",
-        "Se o problema for diferente, forneça detalhes adicionais para ajudar a equipe na análise.",
-    ])
+    if all_closed_candidates:
+        lines.extend([
+            "O ticket relacionado acima já se encontra encerrado. Esta associação é apenas informativa (pode tratar-se de regressão, melhoria posterior ou objetivo distinto).",
+            "",
+            "**Esta solicitação permanece aberta** para análise da equipe; forneça detalhes adicionais se desejar complementar o contexto.",
+        ])
+    else:
+        lines.extend([
+            "Verifique se o problema ou objetivo é exatamente o mesmo. Caso seja, acompanhe a solicitação aberta existente e adicione sua reação 👍 para apoiar a priorização.",
+            "",
+            "Se o objetivo ou o problema for diferente, esta solicitação permanecerá aberta para análise da equipe.",
+        ])
     return "\n".join(lines)
 
 
@@ -225,10 +296,63 @@ class GuardActionExecutor:
         client: IssueApiProtocol,
         config: GuardConfig,
         issues_by_number: dict[int, RawIssue],
+        *,
+        repo: str = "ProjectNox-org/project-nox-requests",
     ) -> None:
         self.client = client
         self.config = config
         self.issues_by_number = issues_by_number
+        self.repo = repo
+
+    def _ensure_closed_duplicate_labels(
+        self,
+        num: int,
+        live_issue: RawIssue,
+        target_res_label: str,
+    ) -> ActionResult | None:
+        """Sanitize labels on an already-closed duplicate issue without touching category/type labels."""
+        has_any_resolution = bool(set(live_issue.labels) & OFFICIAL_RESOLUTION_LABELS)
+        missing_dup = (not has_any_resolution) and (target_res_label not in live_issue.labels)
+        stale_status = [lbl for lbl in INCOMPATIBLE_STATUS_LABELS_ON_DUPLICATE if lbl in live_issue.labels]
+        if not missing_dup and not stale_status:
+            return None
+        if self.config.dry_run:
+            return ActionResult(
+                issue_number=num,
+                decision="confirmed_duplicate",
+                canonical_issue=None,
+                action_taken="dry_run_sanitized_closed_labels",
+                dry_run=True,
+                labels_added=(target_res_label,) if missing_dup else (),
+                labels_removed=tuple(stale_status),
+                closed=True,
+            )
+        added: list[str] = []
+        removed: list[str] = []
+        errors: list[str] = []
+        if missing_dup:
+            try:
+                self.client.add_labels(num, [target_res_label])
+                added.append(target_res_label)
+            except (RateLimitError, PermissionDeniedError, GitHubApiError) as exc:
+                errors.append(f"add_label:{exc}")
+        for lbl in stale_status:
+            try:
+                self.client.remove_label(num, lbl)
+                removed.append(lbl)
+            except (RateLimitError, PermissionDeniedError, GitHubApiError) as exc:
+                errors.append(f"remove_label({lbl}):{exc}")
+        return ActionResult(
+            issue_number=num,
+            decision="confirmed_duplicate",
+            canonical_issue=None,
+            action_taken="sanitized_closed_labels" if not errors else "partial_auto_close_error",
+            dry_run=False,
+            labels_added=tuple(added),
+            labels_removed=tuple(removed),
+            closed=True,
+            partial_errors=tuple(errors),
+        )
 
     def apply(self, decision: GuardDecision) -> ActionResult:
         """Apply comment / label / close actions safely and idempotently."""
@@ -262,6 +386,32 @@ class GuardActionExecutor:
                 skipped_reason="manual_ignore_override",
             )
 
+        # Ensure any already-closed duplicate issue keeps official Duplicado label and never retains Em análise.
+        if live_issue.state == "closed" and (
+            live_issue.state_reason == "duplicate"
+            or LABEL_DUPLICATE in live_issue.labels
+            or (existing_meta and existing_meta.get("action") == "auto_closed")
+        ):
+            target_label = (
+                decision.resolution_label
+                if (existing_meta and existing_meta.get("action") == "auto_closed" and decision.match_kind == "already_fulfilled_creation")
+                else LABEL_DUPLICATE
+            )
+            sanitized = self._ensure_closed_duplicate_labels(num, live_issue, target_label)
+            if sanitized is not None:
+                return ActionResult(
+                    issue_number=num,
+                    decision=decision.classification,
+                    canonical_issue=decision.canonical_issue,
+                    action_taken=sanitized.action_taken,
+                    dry_run=sanitized.dry_run,
+                    comment_id=existing_comment.get("id") if existing_comment else None,
+                    labels_added=sanitized.labels_added,
+                    labels_removed=sanitized.labels_removed,
+                    closed=True,
+                    partial_errors=sanitized.partial_errors,
+                )
+
         # If no duplicate found and bot never commented before, do nothing.
         if decision.classification == "no_match":
             if existing_comment is None:
@@ -281,14 +431,15 @@ class GuardActionExecutor:
                     dry_run=self.config.dry_run,
                     comment_id=existing_comment.get("id"),
                 )
-            # Issue was edited and is no longer considered a duplicate: update existing bot comment cleanly.
-            body = render_comment_body(decision, "cleared", self.issues_by_number)
+            # Issue was edited or semantic engine refined decision: update existing bot comment cleanly.
+            body = render_comment_body(decision, "cleared", self.issues_by_number, repo=self.repo)
             return self._upsert_comment_only(num, decision, "cleared", body, existing_comment)
 
         target_canon_str = str(decision.canonical_issue) if decision.canonical_issue is not None else "none"
+        target_res_label = decision.resolution_label or LABEL_DUPLICATE
 
         # If this issue was already auto-closed by the guard for the exact same decision/canonical/fp
-        # and remains closed with the official Duplicado label, treat re-runs as pure no-op.
+        # and remains closed with its official resolution label, treat re-runs as pure no-op.
         if (
             existing_meta
             and existing_meta.get("action") == "auto_closed"
@@ -296,7 +447,7 @@ class GuardActionExecutor:
             and existing_meta.get("canonical") == target_canon_str
             and existing_meta.get("fp") == decision.fingerprint
             and live_issue.state == "closed"
-            and LABEL_DUPLICATE in live_issue.labels
+            and (LABEL_DUPLICATE in live_issue.labels or LABEL_DONE in live_issue.labels)
         ):
             return ActionResult(
                 issue_number=num,
@@ -331,7 +482,7 @@ class GuardActionExecutor:
                 skipped_reason=block_reason,
             )
 
-        body = render_comment_body(decision, intended_action, self.issues_by_number)
+        body = render_comment_body(decision, intended_action, self.issues_by_number, repo=self.repo)
 
         if self.config.dry_run:
             return ActionResult(
@@ -341,7 +492,7 @@ class GuardActionExecutor:
                 action_taken=f"dry_run_{intended_action}",
                 dry_run=True,
                 comment_id=existing_comment.get("id") if existing_comment else None,
-                labels_added=(LABEL_DUPLICATE,) if can_auto_close else (),
+                labels_added=(target_res_label,) if can_auto_close else (),
                 closed=can_auto_close,
                 skipped_reason=block_reason,
             )
@@ -351,9 +502,12 @@ class GuardActionExecutor:
                 num, decision, "commented", body, existing_comment, skipped_reason=block_reason
             )
 
-        # Perform formal duplicate closure transactionally:
-        # 1. Verify canonical live -> 2. Register justification comment -> 3. Apply label Duplicado ->
-        # 4. Close issue (rollback label on failure) -> 5. Remove initial triage status labels.
+        # Perform formal closure transactionally:
+        # 1. Verify canonical live (when linking to an open issue) ->
+        # 2. Register justification comment with reference & link ->
+        # 3. Apply official resolution label (Duplicado or Concluído) ->
+        # 4. Close issue (rollback label on failure) ->
+        # 5. Re-fetch live issue after close and remove incompatible triage status labels (e.g. Em análise)
         partial_errors: list[str] = []
         labels_added: list[str] = []
         labels_removed: list[str] = []
@@ -361,29 +515,30 @@ class GuardActionExecutor:
         closed_ok = False
 
         # 1. Verify canonical issue is STILL open on live API right before mutating anything
-        try:
-            assert decision.canonical_issue is not None
-            live_canon = RawIssue.from_github_dict(self.client.get_issue(decision.canonical_issue))
-            if live_canon.state != "open" or LABEL_DUPLICATE in live_canon.labels:
-                fallback_body = render_comment_body(decision, "commented", self.issues_by_number)
-                return self._upsert_comment_only(
-                    num,
-                    decision,
-                    "commented",
-                    fallback_body,
-                    existing_comment,
-                    skipped_reason="live_canonical_no_longer_open",
+        # (For catalog-verified already_fulfilled_creation, canonical_issue may be closed or None.)
+        if decision.match_kind != "already_fulfilled_creation" and decision.canonical_issue is not None:
+            try:
+                live_canon = RawIssue.from_github_dict(self.client.get_issue(decision.canonical_issue))
+                if live_canon.state != "open" or LABEL_DUPLICATE in live_canon.labels:
+                    fallback_body = render_comment_body(decision, "commented", self.issues_by_number, repo=self.repo)
+                    return self._upsert_comment_only(
+                        num,
+                        decision,
+                        "commented",
+                        fallback_body,
+                        existing_comment,
+                        skipped_reason="live_canonical_no_longer_open",
+                    )
+            except (RateLimitError, PermissionDeniedError, GitHubApiError) as exc:
+                print(f"[Nox Duplicate Guard] Issue #{num}: falha ao verificar canônico ao vivo: {exc}", file=sys.stderr)
+                return ActionResult(
+                    issue_number=num,
+                    decision=decision.classification,
+                    canonical_issue=decision.canonical_issue,
+                    action_taken="aborted_canonical_check_failed",
+                    dry_run=False,
+                    skipped_reason=str(exc),
                 )
-        except (RateLimitError, PermissionDeniedError, GitHubApiError) as exc:
-            print(f"[Nox Duplicate Guard] Issue #{num}: falha ao verificar canônico ao vivo: {exc}", file=sys.stderr)
-            return ActionResult(
-                issue_number=num,
-                decision=decision.classification,
-                canonical_issue=decision.canonical_issue,
-                action_taken="aborted_canonical_check_failed",
-                dry_run=False,
-                skipped_reason=str(exc),
-            )
 
         # 2. Create or update explanatory comment BEFORE adding resolution label or closing
         try:
@@ -405,15 +560,15 @@ class GuardActionExecutor:
                 partial_errors=(f"comment:{exc}",),
             )
 
-        # 3. Add official label Duplicado
-        added_dup_now = False
-        if LABEL_DUPLICATE not in live_issue.labels:
+        # 3. Add official resolution label (Duplicado, or Concluído for standalone catalog fulfillment)
+        added_res_now = False
+        if target_res_label not in live_issue.labels:
             try:
-                self.client.add_labels(num, [LABEL_DUPLICATE])
-                labels_added.append(LABEL_DUPLICATE)
-                added_dup_now = True
+                self.client.add_labels(num, [target_res_label])
+                labels_added.append(target_res_label)
+                added_res_now = True
             except (RateLimitError, PermissionDeniedError, GitHubApiError) as exc:
-                print(f"[Nox Duplicate Guard] Issue #{num}: falha ao aplicar label Duplicado: {exc}", file=sys.stderr)
+                print(f"[Nox Duplicate Guard] Issue #{num}: falha ao aplicar label {target_res_label}: {exc}", file=sys.stderr)
                 partial_errors.append(f"add_label:{exc}")
                 self._downgrade_comment_after_failure(num, comment_id, decision, partial_errors)
                 return ActionResult(
@@ -426,19 +581,19 @@ class GuardActionExecutor:
                     partial_errors=tuple(partial_errors),
                 )
 
-        # 4. Close issue with state_reason='duplicate' (rollback Duplicado label if close fails)
+        # 4. Close issue with formal state_reason (rollback label if close fails)
         try:
-            self.client.close_issue(num, state_reason="duplicate")
+            self.client.close_issue(num, state_reason=decision.close_state_reason or "duplicate")
             closed_ok = True
         except (RateLimitError, PermissionDeniedError, GitHubApiError) as exc:
             print(f"[Nox Duplicate Guard] Issue #{num}: falha ao fechar issue como duplicada: {exc}", file=sys.stderr)
             partial_errors.append(f"close:{exc}")
-            if added_dup_now:
+            if added_res_now:
                 try:
-                    self.client.remove_label(num, LABEL_DUPLICATE)
+                    self.client.remove_label(num, target_res_label)
                     labels_added.clear()
                 except (RateLimitError, PermissionDeniedError, GitHubApiError) as rb_exc:
-                    print(f"[Nox Duplicate Guard] Issue #{num}: falha ao reverter label Duplicado: {rb_exc}", file=sys.stderr)
+                    print(f"[Nox Duplicate Guard] Issue #{num}: falha ao reverter label {target_res_label}: {rb_exc}", file=sys.stderr)
                     partial_errors.append(f"rollback_label:{rb_exc}")
             self._downgrade_comment_after_failure(num, comment_id, decision, partial_errors)
             return ActionResult(
@@ -453,9 +608,17 @@ class GuardActionExecutor:
                 partial_errors=tuple(partial_errors),
             )
 
-        # 5. Remove incompatible triage status labels ONLY after formal closure succeeds
+        # 5. Remove incompatible triage status labels ONLY after formal closure succeeds.
+        # Re-fetch live issue once to catch any 'Em análise' added concurrently by label-issues.yml.
+        live_labels_after_close = set(live_issue.labels)
+        try:
+            refreshed = RawIssue.from_github_dict(self.client.get_issue(num))
+            live_labels_after_close |= set(refreshed.labels)
+        except (RateLimitError, PermissionDeniedError, GitHubApiError):
+            pass
+
         for lbl in INCOMPATIBLE_STATUS_LABELS_ON_DUPLICATE:
-            if lbl in live_issue.labels:
+            if lbl in live_labels_after_close:
                 try:
                     self.client.remove_label(num, lbl)
                     labels_removed.append(lbl)
@@ -486,7 +649,7 @@ class GuardActionExecutor:
         if not comment_id:
             return
         try:
-            fallback_body = render_comment_body(decision, "commented", self.issues_by_number)
+            fallback_body = render_comment_body(decision, "commented", self.issues_by_number, repo=self.repo)
             self.client.update_comment(int(comment_id), fallback_body)
         except (RateLimitError, PermissionDeniedError, GitHubApiError) as exc:
             print(f"[Nox Duplicate Guard] Issue #{issue_number}: falha ao ajustar comentário após erro parcial: {exc}", file=sys.stderr)
@@ -514,7 +677,9 @@ class GuardActionExecutor:
         # Respect human reopen: if bot previously auto-closed this issue and it's open again, do NOT re-close!
         if existing_meta and existing_meta.get("action") == "auto_closed":
             return False, "previously_auto_closed_then_reopened"
-        if decision.canonical_issue is None or decision.canonical_issue == decision.issue_number:
+        if decision.match_kind != "already_fulfilled_creation" and (
+            decision.canonical_issue is None or decision.canonical_issue == decision.issue_number
+        ):
             return False, "invalid_canonical_issue"
         return True, None
 
