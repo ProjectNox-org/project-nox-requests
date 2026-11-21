@@ -399,8 +399,6 @@ def run_cli(argv: list[str] | None = None, *, client_override: object | None = N
     cache_path = Path(args.cache_file)
     cache_state = _load_cache(cache_path)
 
-    can_persist_cache = (not config.dry_run) and (not args.fixtures_file) and (client is not None)
-
     if args.fixtures_file:
         raw_issues = _load_issues_from_fixtures(Path(args.fixtures_file))
         config = replace(config, dry_run=True)
@@ -409,6 +407,7 @@ def run_cli(argv: list[str] | None = None, *, client_override: object | None = N
     else:
         if client is None:
             client = GitHubClient(args.repo, token=token, dry_run=config.dry_run)
+        can_persist_cache = (not config.dry_run) and (client is not None)
         try:
             raw_dicts = client.list_issues(state="all")  # type: ignore[attr-defined]
         except (RateLimitError, PermissionDeniedError, GitHubApiError) as exc:
