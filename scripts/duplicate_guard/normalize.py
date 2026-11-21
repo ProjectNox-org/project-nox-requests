@@ -431,23 +431,39 @@ _ERROR_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("no_results_found", re.compile(r"\bno\s+results\s+found\b|\bnenhum\s+resultado\s+encontrado\b|\bno\s+manga\s+found\b", re.I)),
     ("cloudflare", re.compile(r"\bcloudflare\b|\bcontornar\s+a?\s*cloudflare\b|\bturnstile\b|\bchallenge\b", re.I)),
     ("nxdomain_dns", re.compile(r"\bnxdomain\b|\bunknownhostexception\b|\bnao\s+foi\s+possivel\s+resolver\b|\bresolve\s+host\b", re.I)),
-    ("json_decode", re.compile(r"\bjsondecodingexception\b|\bunexpected\s+json\s+token\b|\bjson\s+input\b|\bsyntaxerror.*json\b", re.I)),
-    ("null_pointer", re.compile(r"\bnullpointerexception\b|\bnull\s+object\s+reference\b", re.I)),
+    ("json_decode", re.compile(r"\bjsondecodingexception\b|\bserializationexception\b|\bunexpected\s+json\s+token\b|\bjson\s+input\b|\bsyntaxerror.*json\b|\bjson\s+invalido\b|\binvalid\s+json\b|\berro\s+(?:de|no)\s+json\b|\bfalha\s+ao\s+ler\s+json\b", re.I)),
+    ("null_pointer", re.compile(r"\bnullpointerexception\b|\bnull\s+object\s+reference\b|\battempt\s+to\s+invoke\s+virtual\s+method\b", re.I)),
     ("ssl_tls", re.compile(r"\bsslhandshakeexception\b|\bcertpathvalidatorexception\b|\bssl\b|\bcertificado\b", re.I)),
     ("timeout", re.compile(r"\bsockettimeoutexception\b|\btimed?\s*out\b|\btempo\s+esgotado\b", re.I)),
-    ("login_auth", re.compile(r"\blogin\b|\bautenticac[aã]o\b|\bcadastro\b|\bsess[aã]o\b|\bconta\b.*\bentrar\b", re.I)),
+    ("login_auth", re.compile(r"\blogin\b|\bautenticac[aã]o\b|\bautenticar\b|\bcadastro\b|\bsess[aã]o\b|\bconta\b.*\bentrar\b", re.I)),
     ("slow_download", re.compile(r"\blentid[aã]o\b|\bdemorando\b|\bdemora\b.*\bbaixar\b|\bdownload.*\blento\b", re.I)),
-    ("missing_chapters", re.compile(r"\bnao\s+(?:esta|estao)\s+aparecendo\s+todos\s+os\s+capitulos\b|\bso\s+mostra\s+\d+\s+capitulos\b|\bfaltando\s+capitulos\b", re.I)),
+    ("missing_chapters", re.compile(r"\b(?:nao\s+(?:esta|estao)\s+aparecendo\s+todos\s+os\s+capitulos\b|\bso\s+mostra\s+\d+\s+capitulos\b|\bfaltando\s+capitulos\b|\bcapitulo[s]?\s*(?:\d+\s+)?nao\s+aparece(?:m)?(?:\s+na\s+listagem|\s+na\s+lista)?\b)", re.I)),
     ("video_playback", re.compile(r"\b(?:nao\s+reproduz(?:iu|ia|em|iram)?\b|\bvideo\s+nao\s+carrega\b|\berro\s+ao\s+reproduzir\b|\bplayer\b)", re.I)),
     ("site_blocked", re.compile(r"\bsite\s+bloqueou\b|\bbloqueou\s+o\s+acesso\b|\bbloqueio\b", re.I)),
 )
+
+_GENERIC_EXCEPTION_NAMES = frozenset({
+    "exception",
+    "runtimeexception",
+    "ioexception",
+    "httpexception",
+    "sockettimeoutexception",
+    "connectexception",
+    "error",
+    "networkerror",
+    "executionexception",
+    "cancellationexception",
+    "illegalstateexception",
+    "illegalargumentexception",
+    "unknownerror",
+})
 
 _HTTP_CODE_RE = re.compile(r"\b(?:http|erro|status|code)?\s*[:=]?\s*(400|401|403|404|410|429|500|502|503|504|520|521|522|523|525|526)\b", re.I)
 _TECH_HOST_RE = re.compile(r"\b([a-z0-9-]+\.(?:[a-z0-9-]+\.)+[a-z]{2,10})\b", re.I)
 
 
 def extract_error_signatures(text: str) -> tuple[frozenset[str], frozenset[str]]:
-    """Extract canonical error signatures and technical host/exception tokens."""
+    """Extract canonical error signatures and discriminative technical tokens."""
     norm = normalize_text(text, preserve_urls=True)
     sigs: set[str] = set()
     tech: set[str] = set()
@@ -467,11 +483,15 @@ def extract_error_signatures(text: str) -> tuple[frozenset[str], frozenset[str]]
 
     for m in _TECH_HOST_RE.finditer(norm):
         host = m.group(1).lower()
-        if not host.startswith(("java.", "android.", "kotlin.", "github.com", "user-images.")):
+        if not host.startswith(("java.", "android.", "kotlin.", "kotlinx.", "github.com", "user-images.")):
             tech.add(f"host:{host}")
 
-    for exc_m in re.finditer(r"\b([a-z]+(?:exception|error))\b", norm):
-        tech.add(f"exc:{exc_m.group(1)}")
+    for exc_m in re.finditer(r"\b([a-z]*(?:exception|error))\b", norm):
+        exc_name = exc_m.group(1).lower()
+        if exc_name in _GENERIC_EXCEPTION_NAMES:
+            tech.add(f"gexc:{exc_name}")
+        else:
+            tech.add(f"exc:{exc_name}")
 
     return frozenset(sigs), frozenset(tech)
 
@@ -491,7 +511,8 @@ def classify_dead_source_evidence(text: str) -> str:
             r"\bdescontinuad[ao]\b", r"\bexpirou\b", r"\bdominio\s+expirado\b",
             r"\bnxdomain\b", r"\bsuspendedpage\b", r"\bsuspended\b",
             r"\bdiscord\b.*\bconfirm", r"\banuncio\s+oficial\b", r"\bconfirmaram\b",
-            r"\bfechou\b", r"\bfaliu\b", r"\bnao\s+existe\s+mais\b", r"\bsemanas?\b", r"\bmeses?\b",
+            r"\bfechou\b", r"\bfaliu\b", r"\bnao\s+existe\s+mais\b",
+            r"\b(?:offline|fora\s+do\s+ar|indisponivel|inativo|caiu|sem\s+funcionar)\s+ha\s+(?:\d+\s+|varias\s+|algumas\s+)?(?:semanas?|meses?)\b",
         )
         if re.search(pat, scrubbed)
     )
@@ -612,6 +633,9 @@ _SYMPTOM_TOPIC_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("download_fail", re.compile(r"\b(?:ao\s+baixar\s+(?:capitulos?|episodios?)|somente\s+ao\s+baixar|erro\s+(?:ao|no)\s+(?:baixar|download)|nao\s+baixa\s+(?:capitulos?|episodios?))\b", re.I)),
     ("auth_failure", re.compile(r"\b(?:erro\s+(?:de|no)\s+login|fazer\s+login|no\s+login|nao\s+consigo\s+(?:fazer\s+)?login|autentic\w*|sessao\s+expirada|senha\s+invalida)\b", re.I)),
     ("cloudflare_block", re.compile(r"\b(?:cloudflare|turnstile|challenge|bloqueio|bloqueou\s+o\s+acesso)\b", re.I)),
+    ("cover_thumbnail", re.compile(r"\b(?:imagens?\s+de\s+capa|capas?\s+(?:incorretas?|erradas?|nao\s+carregam|quebradas?)|thumbnails?|miniaturas?)\b", re.I)),
+    ("profile_avatar", re.compile(r"\b(?:imagens?\s+de\s+perfil|foto\s+de\s+perfil|avatar)\b", re.I)),
+    ("metadata_text", re.compile(r"\b(?:metadados?\s+(?:errad[oa]s?|incorret[oa]s?)|sinopse\s+errada|informacoes?\s+das\s+obras)\b", re.I)),
 )
 
 _REGRESSION_PATTERNS: tuple[re.Pattern[str], ...] = (
@@ -754,20 +778,134 @@ def detect_regression_signal(text: str) -> bool:
     return any(pat.search(norm) for pat in _REGRESSION_PATTERNS)
 
 
-def extract_specific_work_hint(title_symptom: str, description: str) -> str:
+_GENERIC_WORK_HINTS = frozenset({
+    "qualquer",
+    "alguma",
+    "algum",
+    "todas",
+    "todos",
+    "extensao",
+    "fonte",
+    "site",
+    "leitor",
+    "aplicativo",
+    "catalogo",
+    "lista",
+    "listagem",
+    "biblioteca",
+    "especifica",
+    "especifico",
+    "erro",
+    "problema",
+})
+
+_CHAPTER_COUNT_NOISE_RE = re.compile(
+    r"\b(?:mostra|aparecem?|apenas|so|somente|exibe)\s+\d+\s+capitulos\b",
+    re.IGNORECASE,
+)
+
+
+def extract_specific_work_hint(title_symptom: str, description: str, extension_name: str = "") -> str:
     """Extract a specific manga/anime title hint when issue scopes the problem to one work."""
-    combined = normalize_text(f"{title_symptom} {description}", preserve_urls=False)
-    patterns = (
-        re.compile(r"\b(?:apenas|so|somente)\s+(?:na|no|em)\s+(?:obra|manga|anime)\s+([a-z0-9][a-z0-9\s-]{2,32}?)(?:\s+(?:da|de|do|dos|das|esta|estao|nao|capitulo|capitulos|erro|aparece|acontece|apresenta|retorna|falha|carrega|no|na|para|ao)|$)"),
-        re.compile(r"\b(?:manga|anime)\s+([a-z0-9][a-z0-9-]{2,28}(?:\s+[a-z0-9-]{2,18}){0,2})\s+(?:capitulos?\s+errados?|nao\s+carrega|trocad[oa])"),
+    raw_marked = re.sub(r"\bdá\b", " verbda ", f"{title_symptom} {description}", flags=re.IGNORECASE)
+    combined = re.sub(
+        r"[.,;:!?]+(?=\s|$)",
+        " ",
+        normalize_text(raw_marked, preserve_urls=False),
     )
+    combined = re.sub(r"\s+", " ", combined).strip()
+    patterns = (
+        re.compile(
+            r"\b(?:apenas|so|somente)\s+(?:na|no|em)\s+(?:obra|manga|anime|manhwa|manhua|webtoon)\s+"
+            r"([a-z0-9][a-z0-9\s'-]{1,32}?)(?=\s+(?:da|de|do|dos|das|verbda|esta|estao|nao|capitulo|capitulos|episodio|episodios|erro|aparece|acontece|apresenta|retorna|falha|carrega|no|na|para|ao|com|e)\b|$)"
+        ),
+        re.compile(
+            r"\b(?:capitulos?|cap\.?|episodios?|ep\.?)\s*#?\d+(?:\.\d+)?\s+(?:de|da|do)\s+(?:obra\s+|manga\s+|anime\s+|manhwa\s+)?"
+            r"([a-z0-9][a-z0-9\s'-]{1,30}?)(?=\s+(?:verbda|no|na|ao|quando|esta|estao|nao|aparece|acontece|apresenta|retorna|falha|carrega|com|dando|em|para|e)\b|$)"
+        ),
+        re.compile(
+            r"\b(?:na|da|do|de|pela)\s+obra\s+([a-z0-9][a-z0-9\s'-]{1,30}?)"
+            r"(?=\s+(?:verbda|no|na|ao|quando|esta|estao|nao|aparece|acontece|apresenta|retorna|falha|carrega|com|dando|da|de|do|em|para|e|retornando)\b|$)"
+        ),
+        re.compile(
+            r"\b(?:no|do)\s+(?:manga|anime|manhwa|manhua|webtoon)\s+([a-z0-9][a-z0-9\s'-]{1,30}?)"
+            r"(?=\s+(?:verbda|no|na|ao|quando|esta|estao|nao|aparece|acontece|apresenta|retorna|falha|carrega|com|dando|da|de|do|em|para|e|capitulos?|episodios?)\b|$)"
+        ),
+        re.compile(
+            r"\b(?:manga|anime)\s+([a-z0-9][a-z0-9-]{2,28}(?:\s+[a-z0-9-]{2,18}){0,2})\s+"
+            r"(?:capitulos?\s+errados?|nao\s+carrega|trocad[oa])"
+        ),
+    )
+    ext_compact = compact_name(extension_name)
     for pat in patterns:
         m = pat.search(combined)
         if m:
             hint = re.sub(r"\s+", " ", m.group(1)).strip()
-            if hint not in ("extensao", "fonte", "site", "leitor", "aplicativo"):
+            if not hint or hint in _GENERIC_WORK_HINTS:
+                continue
+            if ext_compact and compact_name(hint) == ext_compact:
+                continue
+            if len(compact_name(hint)) >= 2:
                 return hint
     return ""
+
+
+def extract_chapter_numbers(text: str) -> frozenset[str]:
+    """Extract explicit chapter identifiers (ignoring quantitative counts like 'só mostra 5 capítulos')."""
+    norm = normalize_text(text, preserve_urls=True)
+    if not norm:
+        return frozenset()
+    scrubbed = _CHAPTER_COUNT_NOISE_RE.sub(" ", norm)
+    nums: set[str] = set()
+    for pat in (
+        re.compile(r"\b(?:capitulo|cap\.?)\s*#?(\d+(?:\.\d+)?)\b", re.IGNORECASE),
+        re.compile(r"/chapters?/(\d+(?:\.\d+)?)(?:\b|/|$)", re.IGNORECASE),
+    ):
+        for m in pat.finditer(scrubbed):
+            nums.add(m.group(1))
+    return frozenset(nums)
+
+
+def extract_episode_numbers(text: str) -> frozenset[str]:
+    """Extract explicit episode identifiers from free text or API paths."""
+    norm = normalize_text(text, preserve_urls=True)
+    if not norm:
+        return frozenset()
+    nums: set[str] = set()
+    for pat in (
+        re.compile(r"\b(?:episodio|ep\.?)\s*#?(\d+(?:\.\d+)?)\b", re.IGNORECASE),
+        re.compile(r"/episodes?/(\d+(?:\.\d+)?)(?:\b|/|$)", re.IGNORECASE),
+    ):
+        for m in pat.finditer(norm):
+            nums.add(m.group(1))
+    return frozenset(nums)
+
+
+def extract_api_endpoints(text: str) -> frozenset[str]:
+    """Extract technical HTTP routes / API endpoint paths mentioned in bug reports."""
+    norm = normalize_text(text, preserve_urls=True)
+    if not norm:
+        return frozenset()
+    # Strip full URLs scheme+host so URL root paths like https://site.com/pt/ don't pollute API endpoints
+    # while keeping explicit paths after domains if they match known API prefixes
+    endpoints: set[str] = set()
+    patterns = (
+        re.compile(r"\b(?:get|post|put|delete|patch)\s+(/[a-z0-9._/-]{2,64})\b", re.IGNORECASE),
+        re.compile(
+            r"(?:^|[\s('\"/])(/(?:api|v\d+|graphql|fetch[a-z0-9_]*|chapters?|episodes?|search|manga|anime|auth|login|maintenance)(?:/[a-z0-9._-]+)+)",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"\b(?:endpoint|rota|chamada|path)\s+(/?[a-z0-9._-]+(?:/[a-z0-9._-]+)+)",
+            re.IGNORECASE,
+        ),
+    )
+    for pat in patterns:
+        for m in pat.finditer(norm):
+            ep = "/" + m.group(1).strip().lstrip("/").rstrip("/")
+            if len(ep) >= 3:
+                endpoints.add(ep.lower())
+    return frozenset(endpoints)
 
 
 def has_substantive_observations_text(

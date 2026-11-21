@@ -65,9 +65,13 @@ _ADJACENT_PARTS: tuple[frozenset[str], ...] = (
 )
 
 _SIG_INCOMPATIBLE_PAIRS: tuple[tuple[frozenset[str], frozenset[str]], ...] = (
-    (frozenset({"login_auth"}), frozenset({"no_pages_found", "video_playback", "slow_download", "missing_chapters"})),
-    (frozenset({"slow_download"}), frozenset({"json_decode", "nxdomain_dns", "login_auth", "no_pages_found"})),
-    (frozenset({"video_playback"}), frozenset({"login_auth"})),
+    (frozenset({"login_auth"}), frozenset({"no_pages_found", "no_results_found", "video_playback", "slow_download", "missing_chapters", "timeout", "json_decode"})),
+    (frozenset({"slow_download"}), frozenset({"json_decode", "nxdomain_dns", "login_auth", "no_pages_found", "missing_chapters"})),
+    (frozenset({"video_playback"}), frozenset({"login_auth", "nxdomain_dns"})),
+    (frozenset({"timeout"}), frozenset({"json_decode", "null_pointer", "nxdomain_dns", "no_pages_found", "no_results_found", "login_auth", "missing_chapters"})),
+    (frozenset({"json_decode"}), frozenset({"timeout", "nxdomain_dns", "ssl_tls", "slow_download", "no_pages_found"})),
+    (frozenset({"missing_chapters"}), frozenset({"no_pages_found", "login_auth", "slow_download"})),
+    (frozenset({"no_pages_found"}), frozenset({"no_results_found", "login_auth", "slow_download", "missing_chapters", "timeout", "json_decode"})),
 )
 
 _CANONICAL_REF_PATTERNS = (
@@ -217,8 +221,11 @@ _SYMPTOM_INCOMPATIBLE_PAIRS: tuple[tuple[frozenset[str], frozenset[str]], ...] =
     (frozenset({"vip_paywall"}), frozenset({"cloudflare_block", "no_pages_or_empty", "slow_download", "download_fail", "auth_failure", "login_auth"})),
     (frozenset({"audio_subtitle"}), frozenset({"no_pages_or_empty", "wrong_chapters", "slow_download", "download_fail", "auth_failure", "login_auth"})),
     (frozenset({"site_redesign"}), frozenset({"slow_download", "vip_paywall"})),
-    (frozenset({"auth_failure", "login_auth"}), frozenset({"no_pages_or_empty", "missing_content", "wrong_chapters", "download_fail", "slow_download", "audio_subtitle"})),
-    (frozenset({"download_fail", "slow_download"}), frozenset({"no_pages_or_empty", "wrong_chapters", "auth_failure", "login_auth"})),
+    (frozenset({"auth_failure", "login_auth"}), frozenset({"no_pages_or_empty", "missing_content", "wrong_chapters", "download_fail", "slow_download", "audio_subtitle", "cover_thumbnail", "profile_avatar"})),
+    (frozenset({"download_fail", "slow_download"}), frozenset({"no_pages_or_empty", "wrong_chapters", "auth_failure", "login_auth", "missing_content", "cover_thumbnail", "profile_avatar"})),
+    (frozenset({"missing_content"}), frozenset({"no_pages_or_empty", "wrong_chapters", "chapter_order", "download_fail", "slow_download", "auth_failure", "login_auth"})),
+    (frozenset({"cover_thumbnail"}), frozenset({"metadata_text", "no_pages_or_empty", "download_fail", "slow_download", "auth_failure", "wrong_chapters", "profile_avatar"})),
+    (frozenset({"profile_avatar"}), frozenset({"cover_thumbnail", "metadata_text", "no_pages_or_empty", "missing_content", "download_fail", "slow_download", "wrong_chapters"})),
 )
 
 _STRONG_SPECIFIC_BUG_SIGNATURES = frozenset({
@@ -227,8 +234,6 @@ _STRONG_SPECIFIC_BUG_SIGNATURES = frozenset({
     "nxdomain_dns",
     "json_decode",
     "null_pointer",
-    "missing_chapters",
-    "video_playback",
 })
 
 _GENERIC_BUG_STOPWORDS = frozenset({
@@ -346,6 +351,9 @@ def evaluate_comment_clarifications(
     from .normalize import (
         detect_extension_already_exists,
         detect_regression_signal,
+        extract_api_endpoints,
+        extract_chapter_numbers,
+        extract_episode_numbers,
         extract_error_signatures,
         extract_feature_and_symptom_topics,
         extract_language_context,
@@ -376,7 +384,10 @@ def evaluate_comment_clarifications(
     extra_feats, extra_symps = extract_feature_and_symptom_topics(combined_comments)
     _, _, extra_langs, extra_existing_only = extract_language_context("", combined_comments)
     extra_exists = detect_extension_already_exists(combined_comments)
-    extra_work = extract_specific_work_hint("", combined_comments)
+    extra_work = extract_specific_work_hint("", combined_comments, extension_name=target.name)
+    extra_chapters = extract_chapter_numbers(combined_comments)
+    extra_episodes = extract_episode_numbers(combined_comments)
+    extra_endpoints = extract_api_endpoints(combined_comments)
     extra_urls = extract_urls_from_text(combined_comments)
     ver_m = re.search(r"\bvers(?:ao|ion)\s+v?(\d+(?:\.\d+)+)\b", norm_comments)
     comment_ver = parse_version(ver_m.group(1)) if ver_m else ()
@@ -398,8 +409,16 @@ def evaluate_comment_clarifications(
             return True, "contradictory_error_signature_in_comment"
         if comment_ver and canonical.version_tuple and comment_ver != canonical.version_tuple:
             return True, "version_mismatch_in_comment"
-        if extra_work and (not canonical.specific_work_hint or levenshtein_ratio(extra_work.replace(" ", ""), canonical.specific_work_hint.replace(" ", "")) < 0.72):
+        if extra_work and (not canonical.specific_work_hint or levenshtein_ratio(extra_work.replace(" ", ""), canonical.specific_work_hint.replace(" ", "")) < 0.80):
             return True, "specific_work_clarification_in_comment"
+        if extra_chapters and extra_chapters != canonical.mentioned_chapters:
+            return True, "chapter_divergence_in_comment"
+        if extra_episodes and extra_episodes != canonical.mentioned_episodes:
+            return True, "episode_divergence_in_comment"
+        if extra_endpoints and canonical.api_endpoints and not (extra_endpoints & canonical.api_endpoints):
+            return True, "endpoint_divergence_in_comment"
+        if extra_endpoints and not canonical.api_endpoints:
+            return True, "endpoint_clarification_in_comment"
         if extra_langs and target.category in (CATEGORY_NEW_EXTENSION, CATEGORY_ENHANCEMENT):
             c_langs = canonical.target_languages - {"all"}
             e_langs = extra_langs - {"all"}
@@ -430,6 +449,50 @@ def evaluate_comment_clarifications(
     return False, None
 
 
+def _bug_scopes_diverge(target: ParsedIssue, cand: ParsedIssue) -> tuple[bool, str | None, bool]:
+    """Compare work, chapter, episode, endpoint, and DNS-host scopes between two bugs.
+
+    Returns (diverges, reason_code, hard_disjoint) where hard_disjoint=True warrants no_match.
+    """
+    wt = target.specific_work_hint.replace(" ", "")
+    wc = cand.specific_work_hint.replace(" ", "")
+    if wt and wc and levenshtein_ratio(wt, wc) < 0.80:
+        return True, "different_works", True
+    if bool(wt) != bool(wc):
+        return True, "local_vs_global_work", False
+
+    shared_endpoints = target.api_endpoints & cand.api_endpoints
+    if target.api_endpoints and cand.api_endpoints and not shared_endpoints:
+        return True, "different_endpoints", True
+    if bool(target.api_endpoints) != bool(cand.api_endpoints):
+        return True, "endpoint_scope_mismatch", False
+
+    if target.mentioned_chapters and cand.mentioned_chapters:
+        if target.mentioned_chapters != cand.mentioned_chapters:
+            return True, "different_chapters", True
+        # Matching chapter number without shared work or shared endpoint is ambiguous
+        if not (wt and wc) and not shared_endpoints:
+            return True, "chapter_without_work_or_endpoint", False
+    elif bool(target.mentioned_chapters) != bool(cand.mentioned_chapters):
+        return True, "local_vs_global_chapter", False
+
+    if target.mentioned_episodes and cand.mentioned_episodes:
+        if target.mentioned_episodes != cand.mentioned_episodes:
+            return True, "different_episodes", True
+        if not (wt and wc) and not shared_endpoints:
+            return True, "episode_without_work_or_endpoint", False
+    elif bool(target.mentioned_episodes) != bool(cand.mentioned_episodes):
+        return True, "local_vs_global_episode", False
+
+    if "nxdomain_dns" in (target.error_signatures & cand.error_signatures):
+        hosts_t = {t for t in target.technical_tokens if t.startswith("host:")}
+        hosts_c = {t for t in cand.technical_tokens if t.startswith("host:")}
+        if hosts_t and hosts_c and not (hosts_t & hosts_c):
+            return True, "different_dns_hosts", True
+
+    return False, None, False
+
+
 def _symptoms_contradict(target: ParsedIssue, cand: ParsedIssue) -> bool:
     st, sc = target.symptom_topics, cand.symptom_topics
     if st and sc:
@@ -440,7 +503,7 @@ def _symptoms_contradict(target: ParsedIssue, cand: ParsedIssue) -> bool:
                 return True
     wt, wc = target.specific_work_hint, cand.specific_work_hint
     if wt and wc:
-        if levenshtein_ratio(wt.replace(" ", ""), wc.replace(" ", "")) < 0.72:
+        if levenshtein_ratio(wt.replace(" ", ""), wc.replace(" ", "")) < 0.80:
             return True
     return False
 
@@ -703,14 +766,22 @@ class DuplicateMatcher:
         if cat_matches:
             is_pure_creation = (
                 target.semantic_intent == INTENT_CREATE_EXTENSION
+                and target.ext_type in ("Mangá", "Anime")
+                and bool(target.target_languages)
+                and not any(lang.startswith("unknown:") for lang in target.target_languages)
                 and not target.extension_already_exists
                 and not target.category_mismatch
                 and not target.has_substantive_observations
                 and not target.symptom_topics
                 and not (target.error_signatures - {"cloudflare"})
             )
-            covering = [ext for ext in cat_matches if ext.supports_languages(target.target_languages)]
-            if is_pure_creation and covering:
+            covering = [
+                ext
+                for ext in cat_matches
+                if ext.pkg and ext.name and ext.domains and ext.supports_languages(target.target_languages)
+            ]
+            covering_unique_pkgs = {ext.pkg for ext in covering}
+            if is_pure_creation and covering and len(covering_unique_pkgs) == 1:
                 cat_ext = covering[0]
                 # Prefer linking to an earlier compatible creation ticket if one exists
                 prior_canon: int | None = None
@@ -961,13 +1032,21 @@ class DuplicateMatcher:
         if is_create_t != is_create_c or target.semantic_intent != cand.semantic_intent:
             return None
 
-        # Distinct requested languages on the same domain/site (e.g. EN vs PT-BR) => not duplicates
+        # Distinct or unknown requested languages on the same domain/site => never close automatically
+        if any(lang.startswith("unknown:") for lang in (target.target_languages | cand.target_languages)):
+            return None
         lang_t = target.target_languages - {"all"}
         lang_c = cand.target_languages - {"all"}
         if lang_t and lang_c and not (lang_t & lang_c):
             return None
         if target.existing_only_languages != cand.existing_only_languages:
             return None
+
+        language_scope_incompatible = (
+            ("all" in target.target_languages) != ("all" in cand.target_languages)
+            or (bool(lang_t) and bool(lang_c) and not (lang_t <= lang_c))
+            or (bool(target.target_languages) != bool(cand.target_languages))
+        )
 
         both_valid_urls = bool(t_url and t_url.is_valid_domain and c_url and c_url.is_valid_domain)
         same_domain = both_valid_urls and (t_url.identity_key == c_url.identity_key)
@@ -1016,7 +1095,17 @@ class DuplicateMatcher:
                 or name_ratio >= th.new_extension_confirmed_name_edit_ratio
                 or stem_compat
             )
-            # Divergent substantive observations on creation tickets block automatic closure
+            # Divergent substantive observations or language superset on creation tickets block automatic closure
+            if language_scope_incompatible:
+                return (
+                    "possible_duplicate",
+                    0.70,
+                    (
+                        f"Mesmo domínio ({t_url.identity_key.split(':', 1)[-1]}), porém a solicitação pede cobertura de idioma não garantida pelo ticket anterior.",
+                    ),
+                    ("language_scope_divergence",),
+                    "ambiguous_same_source",
+                )
             if target.has_substantive_observations or cand.has_substantive_observations:
                 feat_t = target.feature_topics - {"nsfw_adult"}
                 feat_c = cand.feature_topics - {"nsfw_adult"}
@@ -1096,12 +1185,22 @@ class DuplicateMatcher:
         parts_rel = _parts_status(target.affected_parts, cand.affected_parts)
         shared_sigs = target.error_signatures & cand.error_signatures
         shared_tech = target.technical_tokens & cand.technical_tokens
+        shared_specific_exc = frozenset(t for t in shared_tech if t.startswith("exc:"))
+        shared_hosts = frozenset(t for t in shared_tech if t.startswith("host:"))
+        shared_endpoints = target.api_endpoints & cand.api_endpoints
         symptoms_conflict = _symptoms_contradict(target, cand)
+        scope_diverges, scope_reason, scope_hard_disjoint = _bug_scopes_diverge(target, cand)
 
         if _signatures_contradict(target.error_signatures, cand.error_signatures):
             return None
 
+        if target.error_signatures and cand.error_signatures and not shared_sigs:
+            return None
+
         if parts_rel == "contradictory":
+            return None
+
+        if scope_diverges and scope_hard_disjoint:
             return None
 
         # Regression and recurrent incident protection against closed or previously resolved bugs
@@ -1181,14 +1280,19 @@ class DuplicateMatcher:
                 )
             return None
 
-        # Distinct specific symptom topics or specific works NEVER auto-close
-        if symptoms_conflict or (bool(target.specific_work_hint) != bool(cand.specific_work_hint)):
-            if parts_rel == "same" and text_sim >= 0.45:
+        # Distinct specific symptom topics or diverging scopes (work, chapter, episode, endpoint) NEVER auto-close
+        if symptoms_conflict or scope_diverges:
+            if parts_rel in ("same", "adjacent") and (text_sim >= 0.45 or shared_sigs):
+                reason_txt = (
+                    f"Mesma extensão, porém os relatos diferem em escopo específico ({scope_reason}); preservado aberto para triagem."
+                    if scope_diverges
+                    else "Mesma extensão e parte afetada, porém relatos indicam sintomas ou obras distintas; preservado para revisão."
+                )
                 return (
                     "possible_duplicate",
                     round(min(0.68, text_sim + 0.1), 3),
-                    ("Mesma extensão e parte afetada, porém relatos indicam sintomas ou obras distintas; preservado para revisão.",),
-                    ("symptom_divergence",),
+                    (reason_txt,),
+                    (scope_reason or "symptom_divergence",),
                     "ambiguous_same_source",
                 )
             return None
@@ -1213,30 +1317,58 @@ class DuplicateMatcher:
                 "regression_check",
             )
 
-        # Positive specific equivalence requirements for confirmed_duplicate in bugs (Sec 4 & 5):
-        # Absence of contradiction or generic HTTP/Cloudflare similarity NEVER suffices for auto-close.
+        # Unilateral technical signature (only one side reports a specific signature) never auto-closes
+        if bool(target.error_signatures) != bool(cand.error_signatures):
+            if parts_rel in ("same", "adjacent") and text_sim >= 0.40:
+                return (
+                    "possible_duplicate",
+                    round(min(0.70, text_sim + 0.12), 3),
+                    ("Mesma extensão, porém apenas um dos tickets informa assinatura técnica específica de erro; mantido aberto para revisão.",),
+                    ("unilateral_error_signature",),
+                    "ambiguous_same_source",
+                )
+            return None
+
+        # Positive specific equivalence requirements for confirmed_duplicate in bugs (Sec 3, 4 & 5):
+        # Shared hostnames (host:*) and generic exceptions (gexc:*) NEVER authorize auto-close alone.
+        # Only shared_hosts tied to nxdomain_dns (DNS host unreachable) provide technical corroboration.
         shared_specific_loose = _specific_bug_evidence_tokens(target, include_part_words=True) & _specific_bug_evidence_tokens(cand, include_part_words=True)
         shared_specific_strict = _specific_bug_evidence_tokens(target, include_part_words=False) & _specific_bug_evidence_tokens(cand, include_part_words=False)
         strong_specific_sigs = shared_sigs & _STRONG_SPECIFIC_BUG_SIGNATURES
-        has_specific_tech_evidence = bool(strong_specific_sigs or shared_tech)
+        has_nxdomain_host = bool("nxdomain_dns" in strong_specific_sigs and shared_hosts)
+        # Non-exception shared tokens count so shared JsonDecodingException alone cannot skip context verification
+        exc_tok_names = {t.split(":", 1)[1] for t in shared_specific_exc}
+        non_exc_specific_loose = shared_specific_loose - exc_tok_names
+        has_specific_tech_evidence = bool(strong_specific_sigs or shared_specific_exc)
 
         desc_len_t = len(normalize_text(f"{target.clean_title} {target.description}", preserve_urls=False))
         desc_len_c = len(normalize_text(f"{cand.clean_title} {cand.description}", preserve_urls=False))
 
-        # Tier 1: Strong specific technical signature (e.g. No pages found, NXDOMAIN, JsonDecodingException) or stack/host token
-        if has_specific_tech_evidence and (parts_rel in ("same", "adjacent") or bool(shared_tech)):
-            if (len(shared_specific_loose) >= 2 or bool(shared_tech)) and (
-                text_sim >= th.bug_confirmed_structured_text_similarity
-                or bool(shared_tech)
-                or "no_pages_found" in strong_specific_sigs
-                or "nxdomain_dns" in strong_specific_sigs
-            ):
-                sigs_str = ", ".join(sorted(shared_sigs or shared_tech))
+        # Tier 1: Strong specific technical signature or specific discriminative exception + compatible part + rich shared context
+        if has_specific_tech_evidence and (parts_rel in ("same", "adjacent") or has_nxdomain_host):
+            context_ok = (
+                bool(shared_endpoints)
+                or has_nxdomain_host
+                or (
+                    len(shared_specific_loose) >= 2
+                    and (not shared_specific_exc or len(non_exc_specific_loose) >= 2)
+                    and (
+                        text_sim >= th.bug_confirmed_structured_text_similarity
+                        or "no_pages_found" in strong_specific_sigs
+                        or "nxdomain_dns" in strong_specific_sigs
+                    )
+                )
+            )
+            if context_ok:
+                ev_parts = sorted(strong_specific_sigs | shared_specific_exc | shared_endpoints) or (
+                    sorted(shared_hosts) if has_nxdomain_host else []
+                )
+                sigs_str = ", ".join(ev_parts)
                 return (
                     "confirmed_duplicate",
                     round(min(0.98, max(0.88, text_sim + 0.35)), 3),
                     (
-                        f"Mesma extensão ({target.name}), parte afetada compatível e evidência técnica específica equivalente no mesmo incidente ({sigs_str}).",
+                        f"Mesma extensão ({target.name}), parte afetada e escopo compatíveis, e evidência técnica específica equivalente no mesmo incidente ({sigs_str}).",
                     ),
                     (),
                     "duplicate",
@@ -1244,7 +1376,8 @@ class DuplicateMatcher:
 
         # Tier 2: Descriptive-only or generic HTTP/Cloudflare bug requires concrete matching part, tight window, and rich shared specifics
         rich_descriptive_match = (
-            (text_sim >= th.bug_confirmed_text_similarity and len(shared_specific_strict) >= 4)
+            bool(shared_endpoints and len(shared_specific_strict) >= 4)
+            or (text_sim >= th.bug_confirmed_text_similarity and len(shared_specific_strict) >= 4)
             or (days_apart <= 7.0 and text_sim >= 0.65 and len(shared_specific_strict) >= 5)
         )
         if (
@@ -1343,7 +1476,16 @@ class DuplicateMatcher:
                 "ambiguous_same_source",
             )
 
+        # Degenerate domain change (old == new) cannot justify automatic closure
         if same_old_valid and t_new.is_valid_domain:
+            if t_old.identity_key == t_new.identity_key:  # type: ignore[union-attr]
+                return (
+                    "possible_duplicate",
+                    0.65,
+                    ("URL antiga e URL nova idênticas no relato; requer verificação humana.",),
+                    ("identical_old_and_new_url",),
+                    "ambiguous_same_source",
+                )
             if cand.is_open:
                 return (
                     "confirmed_duplicate",
@@ -1460,8 +1602,14 @@ class DuplicateMatcher:
         tok_overlap = overlap_coefficient(target.all_text_tokens, cand.all_text_tokens)
         th = self.config.thresholds
 
+        ext_tokens = tokenize(target.related_extension or "")
+        informative_shared = (target.all_text_tokens & cand.all_text_tokens) - ext_tokens - _GENERIC_BUG_STOPWORDS
         if (
             cand.is_open
+            and feat_t == feat_c
+            and len(normalize_text(target.description, preserve_urls=False)) >= 25
+            and len(normalize_text(cand.description, preserve_urls=False)) >= 25
+            and len(informative_shared) >= 3
             and combined >= th.enhancement_confirmed_combined_similarity
             and tok_overlap >= th.enhancement_confirmed_summary_overlap
         ):

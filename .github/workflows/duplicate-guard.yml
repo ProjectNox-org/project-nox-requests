@@ -69,16 +69,16 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Baixar repositório
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Configurar Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
       - name: Restaurar cache incremental do Duplicate Guard
         if: github.event_name != 'issues'
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .cache/nox-duplicate-guard
           key: nox-duplicate-guard-${{ github.repository_id }}-v1-${{ github.run_id }}-${{ github.run_attempt }}
