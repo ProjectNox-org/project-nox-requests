@@ -107,6 +107,8 @@ class InMemoryGitHubApi:
 
     def list_issues(self, *, state: str = "all") -> list[dict]:
         self.api_calls_made += 1
+        if "list_issues" in self.fail_on:
+            raise self.fail_on["list_issues"]
         if state == "all":
             return [dict(v) for v in self.issues.values()]
         return [dict(v) for v in self.issues.values() if v.get("state") == state]
@@ -1133,3 +1135,86 @@ def test_workflow_security_no_untrusted_interpolation():
     assert "github.event.issue.title" not in wf_text
     assert "github.event.issue.body" not in wf_text
     assert "github.event.comment.body" not in wf_text
+
+
+def test_32_rate_limit_exit_code_and_checkpoint_resumption(tmp_path, capsys):
+    # 1. RateLimitError on initial list_issues exits non-zero (3) with incomplete_rate_limited status
+    api_list_rl = InMemoryGitHubApi([])
+    api_list_rl.fail_on["list_issues"] = RateLimitError("API rate limit exceeded", status=429)
+    summary_list = tmp_path / "summary_list.md"
+    rc_list = run_cli(
+        ["--mode", "backfill", "--cache-file", str(tmp_path / "c1.json"), "--summary-file", str(summary_list)],
+        client_override=api_list_rl,
+    )
+    assert rc_list == 3
+    captured = capsys.readouterr()
+    err_payload = json.loads(captured.err)
+    assert err_payload["status"] == "incomplete_rate_limited"
+    assert err_payload["completed"] is False
+    assert err_payload["recoverable"] is True
+    assert "incomplete_rate_limited" in summary_list.read_text(encoding="utf-8")
+
+    # 2. Mid-batch RateLimitError saves earlier checkpoints, marks incomplete (rc=3), and resumes cleanly
+    i1 = make_raw(
+        10, "[Nova extensão]: AlphaScan",
+        "### Tipo de extensão\nMangá\n### Nome da fonte\nAlphaScan\n### URL do site\nhttps://alphascan.com\n",
+        labels=["Nova extensão", "Mangá"],
+        created_at="2026-10-01T10:00:00Z",
+    )
+    i2 = make_raw(
+        11, "[Nova extensão]: BetaScan",
+        "### Tipo de extensão\nMangá\n### Nome da fonte\nBetaScan\n### URL do site\nhttps://betascan.com\n",
+        labels=["Nova extensão", "Mangá"],
+        created_at="2026-10-02T10:00:00Z",
+    )
+    i3 = make_raw(
+        12, "[Nova extensão]: BetaScan",
+        "### Tipo de extensão\nMangá\n### Nome da fonte\nBetaScan\n### URL do site\nhttps://betascan.com\n",
+        labels=["Nova extensão", "Mangá", "Em análise"],
+        created_at="2026-10-03T10:00:00Z",
+    )
+
+    class MidBatchRateLimitApi(InMemoryGitHubApi):
+        def get_issue(self, issue_number: int) -> dict:
+            if issue_number == 12:
+                raise RateLimitError("GitHub API rate limit exceeded (HTTP 429)", status=429)
+            return super().get_issue(issue_number)
+
+    api_mid = MidBatchRateLimitApi([i1, i2, i3])
+    cache_file = tmp_path / "rl_cache.json"
+    summary_mid = tmp_path / "summary_mid.md"
+    rc_mid = run_cli(
+        ["--mode", "backfill", "--cache-file", str(cache_file), "--summary-file", str(summary_mid)],
+        client_override=api_mid,
+    )
+    assert rc_mid == 3
+    out_mid = json.loads(capsys.readouterr().out)
+    assert out_mid["status"] == "incomplete_rate_limited"
+    assert out_mid["completed"] is False
+    assert out_mid["recoverable"] is True
+    assert out_mid["rate_limited_stop"] is True
+    assert "incomplete_rate_limited" in summary_mid.read_text(encoding="utf-8")
+
+    persisted_mid = json.loads(cache_file.read_text(encoding="utf-8"))
+    assert persisted_mid["last_full_backfill_at"] is None
+    assert "10" in persisted_mid["evaluated"]
+    assert "11" in persisted_mid["evaluated"]
+    assert "12" not in persisted_mid["evaluated"]
+
+    # After rate limit resets, subsequent run skips #10 & #11 from cache and closes #12 cleanly
+    api_resume = InMemoryGitHubApi([i1, i2, i3])
+    rc_resume = run_cli(
+        ["--mode", "reconcile", "--cache-file", str(cache_file)],
+        client_override=api_resume,
+    )
+    assert rc_resume == 0
+    out_resume = json.loads(capsys.readouterr().out)
+    assert out_resume["status"] == "ok"
+    assert out_resume["completed"] is True
+    assert out_resume["effective_mode"] == "backfill"
+    assert out_resume["skipped_cached_count"] == 2
+    assert out_resume["processed_via_api_count"] == 1
+    assert api_resume.issues[12]["state"] == "closed"
+    assert api_resume.issues[12]["state_reason"] == "duplicate"
+    persisted_after = json.loads(cache_file.read_text(encoding="utf-8"))
+    assert persisted_after["last_full_backfill_at"] is not None

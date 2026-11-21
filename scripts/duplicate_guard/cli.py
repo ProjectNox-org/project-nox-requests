@@ -89,6 +89,8 @@ def build_duplicate_links(
                     dup_cache[key] = {"updated_at": raw.updated_at, "canonical": canon}
                 if canon and canon != raw.number:
                     links[raw.number] = canon
+            except RateLimitError:
+                raise
             except GitHubApiError:
                 continue
     return links
@@ -217,6 +219,46 @@ def _is_cache_hit(
     return True
 
 
+def _is_rate_limit_failure(skipped_reason: object, partial_errors: list[str] | tuple[str, ...]) -> bool:
+    if skipped_reason and "rate limit" in str(skipped_reason).lower():
+        return True
+    return any("rate limit" in str(err).lower() for err in (partial_errors or ()))
+
+
+def _abort_api_error(args: argparse.Namespace, exc: Exception, summary_path: str | None) -> int:
+    is_rate_limit = isinstance(exc, RateLimitError)
+    status = "incomplete_rate_limited" if is_rate_limit else "fatal_error"
+    recoverable = is_rate_limit
+    rc = 3 if is_rate_limit else 1
+    if summary_path:
+        title = "Execução interrompida por limite de taxa (Rate Limit)" if is_rate_limit else "Falha fatal de API"
+        Path(summary_path).write_text(
+            "\n".join([
+                "### 🛡️ Nox Duplicate Guard — Relatório de Execução",
+                "",
+                "> [!WARNING]",
+                f"> **{title}:** `{status}` — {exc}",
+                "",
+            ]),
+            encoding="utf-8",
+        )
+    print(
+        json.dumps(
+            {
+                "status": status,
+                "completed": False,
+                "recoverable": recoverable,
+                "mode": args.mode,
+                "repo": args.repo,
+                "error": str(exc),
+            },
+            ensure_ascii=False,
+        ),
+        file=sys.stderr,
+    )
+    return rc
+
+
 def _write_summary(summary_path: str | None, meta: dict, results: list[dict]) -> None:
     if not summary_path:
         return
@@ -224,7 +266,8 @@ def _write_summary(summary_path: str | None, meta: dict, results: list[dict]) ->
         "### 🛡️ Nox Duplicate Guard — Relatório de Execução",
         "",
         (
-            f"- **Modo efetivo:** `{meta['effective_mode']}` | "
+            f"- **Status:** `{meta['status']}` | "
+            f"**Modo efetivo:** `{meta['effective_mode']}` | "
             f"**Dry-Run:** `{meta['dry_run']}` | "
             f"**Auto-Close:** `{meta['auto_close_enabled']}`"
         ),
@@ -241,6 +284,18 @@ def _write_summary(summary_path: str | None, meta: dict, results: list[dict]) ->
         ),
         "",
     ]
+    if meta.get("rate_limited_stop"):
+        lines.extend([
+            "> [!WARNING]",
+            "> **Execução interrompida por limite de taxa (Rate Limit):** Progresso parcial salvo no cache (`status: incomplete_rate_limited`). O próximo ciclo retomará automaticamente as Issues pendentes.",
+            "",
+        ])
+    elif meta.get("batch_truncated"):
+        lines.extend([
+            "> [!NOTE]",
+            "> **Lote truncado (`incomplete_batch`):** Há Issues pendentes; o próximo ciclo retomará do ponto salvo no cache.",
+            "",
+        ])
     if meta.get("error_count", 0) > 0:
         lines.extend([
             "> [!WARNING]",
@@ -289,24 +344,31 @@ def run_cli(argv: list[str] | None = None, *, client_override: object | None = N
     cache_path = Path(args.cache_file)
     cache_state = _load_cache(cache_path)
 
+    can_persist_cache = (not config.dry_run) and (not args.fixtures_file) and (client is not None)
+
     if args.fixtures_file:
         raw_issues = _load_issues_from_fixtures(Path(args.fixtures_file))
         config = replace(config, dry_run=True)
         client = None
+        can_persist_cache = False
     else:
         if client is None:
             client = GitHubClient(args.repo, token=token, dry_run=config.dry_run)
         try:
             raw_dicts = client.list_issues(state="all")  # type: ignore[attr-defined]
         except (RateLimitError, PermissionDeniedError, GitHubApiError) as exc:
-            print(json.dumps({"status": "conservative_abort", "error": str(exc)}, ensure_ascii=False), file=sys.stderr)
-            return 0 if isinstance(exc, RateLimitError) else 1
+            return _abort_api_error(args, exc, args.summary_file)
         raw_issues = [RawIssue.from_github_dict(d) for d in raw_dicts]
 
     issues_by_num = {r.number: r for r in raw_issues}
     parsed_list = parse_corpus(raw_issues)
     parsed_by_num = {p.raw.number: p for p in parsed_list}
-    dup_links = build_duplicate_links(raw_issues, client, cache_state=cache_state)
+    try:
+        dup_links = build_duplicate_links(raw_issues, client, cache_state=cache_state)
+    except (RateLimitError, PermissionDeniedError, GitHubApiError) as exc:
+        if can_persist_cache:
+            _save_cache(cache_path, cache_state)
+        return _abort_api_error(args, exc, args.summary_file)
     matcher = DuplicateMatcher(parsed_list, config, duplicate_links=dup_links)
 
     effective_mode = args.mode
@@ -327,9 +389,8 @@ def run_cli(argv: list[str] | None = None, *, client_override: object | None = N
                     raw_single = RawIssue.from_github_dict(single_dict)
                     issues_by_num[issue_num] = raw_single
                     parsed_by_num[issue_num] = parse_issue(raw_single, _collect_known_extensions(raw_issues))
-            except GitHubApiError as exc:
-                print(json.dumps({"status": "conservative_abort", "error": str(exc)}, ensure_ascii=False), file=sys.stderr)
-                return 1
+            except (RateLimitError, PermissionDeniedError, GitHubApiError) as exc:
+                return _abort_api_error(args, exc, args.summary_file)
         if issue_num in parsed_by_num:
             target_numbers.append(issue_num)
     elif effective_mode == "backfill":
@@ -353,7 +414,6 @@ def run_cli(argv: list[str] | None = None, *, client_override: object | None = N
     report_rows: list[dict] = []
     executor = GuardActionExecutor(client, config, issues_by_num) if client is not None else None  # type: ignore[arg-type]
 
-    can_persist_cache = (not config.dry_run) and (not args.fixtures_file) and (client is not None)
     processed_api_batch = 0
     skipped_cached_count = 0
     batch_truncated = False
@@ -432,7 +492,9 @@ def run_cli(argv: list[str] | None = None, *, client_override: object | None = N
                     cat_list[idx] = new_parsed
                     break
 
-        if can_persist_cache and action_taken in TERMINAL_CACHE_ACTIONS:
+        is_rate_limited = _is_rate_limit_failure(skipped_reason, partial_errors)
+
+        if can_persist_cache and (not is_rate_limited) and action_taken in TERMINAL_CACHE_ACTIONS:
             canon_state = issues_by_num[decision.canonical_issue].state if decision.canonical_issue in issues_by_num else None
             cache_state["evaluated"][str(num)] = {
                 "updated_at": target_parsed.raw.updated_at,
@@ -460,8 +522,10 @@ def run_cli(argv: list[str] | None = None, *, client_override: object | None = N
             "partial_errors": partial_errors,
         })
 
-        if skipped_reason and "rate limit" in skipped_reason.lower():
+        if is_rate_limited:
             rate_limited_stop = True
+            if can_persist_cache:
+                _save_cache(cache_path, cache_state)
             break
 
     open_numbers = {num for num, raw_obj in issues_by_num.items() if raw_obj.state == "open"}
@@ -493,12 +557,35 @@ def run_cli(argv: list[str] | None = None, *, client_override: object | None = N
     error_count = sum(
         1 for r in report_rows
         if (r["partial_errors"] or r["action_taken"] in error_actions)
-        and not (r.get("skipped_reason") and "rate limit" in str(r["skipped_reason"]).lower())
+        and not _is_rate_limit_failure(r.get("skipped_reason"), r.get("partial_errors", []))
     )
     api_calls = getattr(client, "api_calls_made", 0) if client is not None else 0
 
+    if error_count > 0:
+        status = "partial_error"
+        completed = False
+        recoverable = False
+        exit_code = 2
+    elif rate_limited_stop:
+        status = "incomplete_rate_limited"
+        completed = False
+        recoverable = True
+        exit_code = 3
+    elif batch_truncated:
+        status = "incomplete_batch"
+        completed = False
+        recoverable = True
+        exit_code = 0
+    else:
+        status = "ok"
+        completed = True
+        recoverable = True
+        exit_code = 0
+
     meta = {
-        "status": "partial_error" if error_count > 0 else "ok",
+        "status": status,
+        "completed": completed,
+        "recoverable": recoverable,
         "mode": args.mode,
         "effective_mode": effective_mode,
         "repo": args.repo,
@@ -521,7 +608,7 @@ def run_cli(argv: list[str] | None = None, *, client_override: object | None = N
 
     _write_summary(args.summary_file, meta, report_rows)
     print(json.dumps({**meta, "results": report_rows}, ensure_ascii=False, indent=2))
-    return 2 if error_count > 0 else 0
+    return exit_code
 
 
 if __name__ == "__main__":
