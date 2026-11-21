@@ -9,6 +9,7 @@ permissions:
 
 jobs:
   normalize-and-label:
+    if: ${{ !github.event.issue.pull_request }}
     runs-on: ubuntu-latest
     steps:
       - name: Executar normalização de título e classificação de labels
@@ -17,6 +18,10 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const issue = context.payload.issue;
+            if (!issue || issue.pull_request) {
+              console.log('Evento ignorado: não é uma Issue válida.');
+              return;
+            }
             const body = issue.body || '';
             const rawTitle = (issue.title || '').trim();
             const currentLabels = (issue.labels || []).map(l => l.name);
@@ -174,14 +179,25 @@ jobs:
             }
 
             // D) Status Inicial Obrigatório: "Em análise"
+            // Reconsulta o estado ao vivo antes de aplicar status para evitar race com o Duplicate Guard
+            let liveClosed = isClosed;
+            let liveLabels = currentLabels;
+            try {
+              const { data: liveIssue } = await github.rest.issues.get(params);
+              liveClosed = liveIssue.state === 'closed';
+              liveLabels = (liveIssue.labels || []).map(l => typeof l === 'string' ? l : l.name);
+            } catch (err) {
+              console.warn('Não foi possível reconsultar estado ao vivo antes de aplicar status:', err.message);
+            }
+
             const statuses = ['Em análise', 'Aceito', 'Em desenvolvimento', 'Aguardando informações'];
             const resolutions = ['Concluído', 'Recusado', 'Duplicado', 'Cancelado'];
 
-            const hasStatus = currentLabels.some(l => statuses.includes(l) || l.startsWith('status:')) ||
+            const hasStatus = liveLabels.some(l => statuses.includes(l) || l.startsWith('status:')) ||
                               Array.from(labelsToAdd).some(l => statuses.includes(l));
-            const hasResolution = currentLabels.some(l => resolutions.includes(l) || l.startsWith('resolution:'));
+            const hasResolution = liveLabels.some(l => resolutions.includes(l) || l.startsWith('resolution:'));
 
-            if (!isClosed && !hasStatus && !hasResolution) {
+            if (!liveClosed && !hasStatus && !hasResolution) {
               labelsToAdd.add('Em análise');
             }
 

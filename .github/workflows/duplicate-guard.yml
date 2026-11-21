@@ -1,0 +1,109 @@
+name: Nox Duplicate Guard
+
+on:
+  issues:
+    types: [opened, edited, reopened]
+  schedule:
+    - cron: "23 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Modo de execução (single ou reconcile)"
+        required: true
+        type: choice
+        default: reconcile
+        options:
+          - reconcile
+          - single
+      issue_number:
+        description: "Número da Issue (obrigatório quando mode=single)"
+        required: false
+        type: string
+      dry_run:
+        description: "Simular sem comentar, rotular ou encerrar Issues"
+        required: true
+        type: boolean
+        default: true
+      auto_close:
+        description: "Política de encerramento automático (config, true ou false)"
+        required: true
+        type: choice
+        default: config
+        options:
+          - config
+          - "true"
+          - "false"
+      lookback_days:
+        description: "Janela de dias para reconciliação"
+        required: false
+        type: string
+        default: "30"
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: nox-duplicate-guard-${{ github.event.issue.number || github.event_name }}
+  cancel-in-progress: false
+
+jobs:
+  duplicate-guard:
+    if: >-
+      vars.NOX_DUPLICATE_GUARD_ENABLED != 'false' &&
+      (github.event_name != 'issues' || !github.event.issue.pull_request)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Baixar repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Executar Nox Duplicate Guard
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+          INPUT_MODE: ${{ github.event.inputs.mode }}
+          INPUT_ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
+          INPUT_DRY_RUN: ${{ github.event.inputs.dry_run }}
+          INPUT_AUTO_CLOSE: ${{ github.event.inputs.auto_close }}
+          INPUT_LOOKBACK_DAYS: ${{ github.event.inputs.lookback_days }}
+          NOX_DUPLICATE_GUARD_ENABLED: ${{ vars.NOX_DUPLICATE_GUARD_ENABLED }}
+          NOX_DUPLICATE_GUARD_AUTO_CLOSE: ${{ vars.NOX_DUPLICATE_GUARD_AUTO_CLOSE }}
+          NOX_DUPLICATE_GUARD_DRY_RUN: ${{ vars.NOX_DUPLICATE_GUARD_DRY_RUN }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import subprocess
+          import sys
+
+          event_name = os.environ.get("GITHUB_EVENT_NAME", "")
+          cmd = [sys.executable, "-m", "scripts.duplicate_guard.cli"]
+
+          if event_name == "workflow_dispatch":
+              mode = os.environ.get("INPUT_MODE") or "reconcile"
+              cmd.extend(["--mode", mode])
+              issue_num = (os.environ.get("INPUT_ISSUE_NUMBER") or "").strip()
+              if mode == "single" and issue_num.isdigit():
+                  cmd.extend(["--issue-number", issue_num])
+              lookback = (os.environ.get("INPUT_LOOKBACK_DAYS") or "30").strip()
+              if lookback.isdigit():
+                  cmd.extend(["--lookback-days", lookback])
+              dry_run_input = (os.environ.get("INPUT_DRY_RUN") or "true").strip().lower()
+              cmd.append("--dry-run" if dry_run_input == "true" else "--no-dry-run")
+              auto_close = (os.environ.get("INPUT_AUTO_CLOSE") or "config").strip().lower()
+              if auto_close in ("config", "true", "false"):
+                  cmd.extend(["--auto-close", auto_close])
+          elif event_name == "schedule":
+              cmd.extend(["--mode", "reconcile"])
+          else:
+              cmd.extend(["--mode", "single"])
+
+          raise SystemExit(subprocess.call(cmd))
+          PY
