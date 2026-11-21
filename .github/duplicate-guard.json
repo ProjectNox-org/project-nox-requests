@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "enabled": true,
+  "auto_close_enabled": true,
+  "dry_run": false,
+  "reconcile_lookback_days": 30,
+  "max_candidates_in_comment": 3,
+  "dead_source_window_days": 30,
+  "bug_regression_days": 3,
+  "auto_close_categories": [
+    "new_extension",
+    "bug",
+    "domain_change",
+    "dead_source",
+    "enhancement"
+  ],
+  "thresholds": {
+    "new_extension": {
+      "confirmed_name_edit_ratio": 0.72,
+      "possible_name_edit_ratio": 0.88
+    },
+    "bug": {
+      "confirmed_text_similarity": 0.78,
+      "confirmed_structured_text_similarity": 0.30,
+      "possible_text_similarity": 0.50,
+      "possible_same_part_similarity": 0.25,
+      "min_description_chars_for_auto_close": 15
+    },
+    "dead_source": {
+      "confirmed_text_similarity": 0.55,
+      "possible_text_similarity": 0.25
+    },
+    "enhancement": {
+      "confirmed_combined_similarity": 0.85,
+      "confirmed_summary_overlap": 0.70,
+      "possible_tfidf_similarity": 0.42,
+      "possible_token_overlap": 0.30
+    }
+  }
+}
