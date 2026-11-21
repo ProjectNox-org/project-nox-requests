@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Tests for .github/workflows/sync-tracker.yml dispatch configuration."""
 
+import shutil
+import subprocess
 from pathlib import Path
 import yaml
 
@@ -45,3 +47,14 @@ def test_sync_tracker_job_filters_prs_and_uses_secret():
     assert "issues-updated" in script
     assert "createDispatchEvent" in script
     assert "ghp_" not in script and "github_pat_" not in script
+
+    node = shutil.which("node")
+    if node:
+        js_check = (
+            "const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor; "
+            "const fs = require('fs'); "
+            "const src = fs.readFileSync(0, 'utf8'); "
+            "new AsyncFunction('require','__dirname','__filename','github','octokit','context','core','exec','glob','io', src);"
+        )
+        res = subprocess.run([node, "-e", js_check], input=script, text=True, capture_output=True)
+        assert res.returncode == 0, f"github-script AsyncFunction syntax/shadowing error: {res.stderr}"

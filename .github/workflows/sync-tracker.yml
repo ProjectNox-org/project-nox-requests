@@ -33,11 +33,11 @@ jobs:
               return;
             }
 
-            const octokit = github.getOctokit(token);
+            const trackerClient = github.getOctokit(token);
             const issueNumber = context.payload.issue ? context.payload.issue.number : null;
             const action = context.payload.action || context.eventName;
 
-            await octokit.rest.repos.createDispatchEvent({
+            await trackerClient.rest.repos.createDispatchEvent({
               owner: 'ProjectNox-org',
               repo: 'project-nox-tracker',
               event_type: 'issues-updated',
