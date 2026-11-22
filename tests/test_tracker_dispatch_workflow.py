@@ -45,7 +45,8 @@ def test_sync_tracker_job_filters_prs_and_uses_secret():
     assert "ProjectNox-org" in script
     assert "project-nox-tracker" in script
     assert "issues-updated" in script
-    assert "createDispatchEvent" in script
+    assert "dispatches" in script
+    assert "getOctokit" not in script
     assert "ghp_" not in script and "github_pat_" not in script
 
     node = shutil.which("node")

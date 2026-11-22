@@ -33,22 +33,39 @@ jobs:
               return;
             }
 
-            const trackerClient = github.getOctokit(token);
             const issueNumber = context.payload.issue ? context.payload.issue.number : null;
             const action = context.payload.action || context.eventName;
 
-            await trackerClient.rest.repos.createDispatchEvent({
-              owner: 'ProjectNox-org',
-              repo: 'project-nox-tracker',
-              event_type: 'issues-updated',
-              client_payload: {
-                source_repo: `${context.repo.owner}/${context.repo.repo}`,
-                issue_number: issueNumber,
-                action,
-              },
-            });
+            const response = await fetch(
+              'https://api.github.com/repos/ProjectNox-org/project-nox-tracker/dispatches',
+              {
+                method: 'POST',
+                headers: {
+                  Accept: 'application/vnd.github+json',
+                  Authorization: `Bearer ${token}`,
+                  'Content-Type': 'application/json',
+                  'User-Agent': 'project-nox-requests-sync-dispatcher',
+                  'X-GitHub-Api-Version': '2022-11-28',
+                },
+                body: JSON.stringify({
+                  event_type: 'issues-updated',
+                  client_payload: {
+                    source_repo: `${context.repo.owner}/${context.repo.repo}`,
+                    issue_number: issueNumber,
+                    action,
+                  },
+                }),
+              }
+            );
+
+            if (!response.ok) {
+              const errBody = await response.text();
+              throw new Error(
+                `Falha ao disparar repository_dispatch no Project Nox Tracker (HTTP ${response.status}): ${errBody}`
+              );
+            }
 
             console.log(
               `repository_dispatch (issues-updated) enviado para ProjectNox-org/project-nox-tracker ` +
-              `(action=${action}, issue=${issueNumber ?? 'manual'}).`
+              `(action=${action}, issue=${issueNumber ?? 'manual'}, status=${response.status}).`
             );
